@@ -267,7 +267,7 @@ async function loadServers() {
 
 function renderServers() {
     if (servers.length === 0) {
-        serversContainer.innerHTML = '<p class="loading">📁 No servers found<br><small>Add server folders to minecraft-servers/</small></p>';
+        serversContainer.innerHTML = '<p class="loading">🔍 No servers found<br><small>Add server folders to minecraft-servers/</small></p>';
         return;
     }
 
@@ -313,17 +313,43 @@ function renderServers() {
     });
 }
 
-function selectServer(serverName) {
+// UPDATED: Load console logs from backend
+async function selectServer(serverName) {
     selectedServer = serverName;
     renderServers();
     showServerDetails();
     updateServerStatus();
     
-    // Clear console and subscribe to new server
+    // Clear console first
     consoleOutput.textContent = '';
     appendToConsole(`[INFO] Connected to ${serverName}\n`);
-    appendToConsole(`[INFO] Console output will appear here...\n\n`);
     
+    // Load existing console logs from backend
+    try {
+        const response = await fetch(`/api/servers/${serverName}/logs`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.logs && data.logs.length > 0) {
+                // Display all stored logs
+                data.logs.forEach(log => {
+                    consoleOutput.textContent += log;
+                });
+                consoleOutput.scrollTop = consoleOutput.scrollHeight;
+            } else {
+                appendToConsole(`[INFO] Console output will appear here...\n\n`);
+            }
+        } else {
+            appendToConsole(`[INFO] Console output will appear here...\n\n`);
+        }
+    } catch (error) {
+        console.error('Failed to load console logs:', error);
+        appendToConsole(`[INFO] Console output will appear here...\n\n`);
+    }
+    
+    // Subscribe to WebSocket for real-time updates
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'subscribe', serverName }));
     }
@@ -373,6 +399,35 @@ refreshServersBtn.addEventListener('click', async () => {
     refreshServersBtn.textContent = '🔄 Refreshing...';
     
     await loadServers();
+    
+    // UPDATED: Reload console logs for currently selected server
+    if (selectedServer) {
+        try {
+            const response = await fetch(`/api/servers/${selectedServer}/logs`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                
+                // Clear and reload console
+                consoleOutput.textContent = '';
+                appendToConsole(`[INFO] Connected to ${selectedServer}\n`);
+                
+                if (data.logs && data.logs.length > 0) {
+                    data.logs.forEach(log => {
+                        consoleOutput.textContent += log;
+                    });
+                    consoleOutput.scrollTop = consoleOutput.scrollHeight;
+                    appendToConsole(`\n[INFO] Console refreshed (${data.logs.length} entries)\n`);
+                } else {
+                    appendToConsole(`[INFO] No console history available\n\n`);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to reload console logs:', error);
+        }
+    }
     
     setTimeout(() => {
         refreshServersBtn.disabled = false;
