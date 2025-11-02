@@ -8,69 +8,83 @@ let statusUpdateInterval = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
-// Console history per server
-let consoleHistory = {}; // { serverName: "console text..." }
-
 // DOM Elements
-const authPanel = document.getElementById('auth-panel');
-const dashboard = document.getElementById('dashboard');
+const loginPage = document.getElementById('login-page');
+const registerPage = document.getElementById('register-page');
+const dashboardPage = document.getElementById('dashboard-page');
+const consolePage = document.getElementById('console-page');
+
 const loginForm = document.getElementById('loginForm');
 const registerForm = document.getElementById('registerForm');
 const authError = document.getElementById('auth-error');
+const registerError = document.getElementById('register-error');
 const showRegisterBtn = document.getElementById('show-register');
 const showLoginBtn = document.getElementById('show-login');
+
 const logoutBtn = document.getElementById('logout-btn');
+const logoutBtn2 = document.getElementById('logout-btn-2');
 const usernameDisplay = document.getElementById('username-display');
-const serversContainer = document.getElementById('servers-container');
+const usernameDisplay2 = document.getElementById('username-display-2');
+
+const serversGrid = document.getElementById('servers-grid');
 const refreshServersBtn = document.getElementById('refresh-servers');
-const noServerSelected = document.getElementById('no-server-selected');
-const serverDetails = document.getElementById('server-details');
-const selectedServerName = document.getElementById('selected-server-name');
-const serverStatus = document.getElementById('server-status');
+
+const backToDashboardBtn = document.getElementById('back-to-dashboard');
+const consoleServerName = document.getElementById('console-server-name');
+const consoleServerStatus = document.getElementById('console-server-status');
+const consoleServerUptime = document.getElementById('console-server-uptime');
 const startServerBtn = document.getElementById('start-server');
 const stopServerBtn = document.getElementById('stop-server');
-const configServerBtn = document.getElementById('config-server');
+
 const consoleOutput = document.getElementById('console-output');
 const commandInput = document.getElementById('command-input');
 const sendCommandBtn = document.getElementById('send-command');
 const clearConsoleBtn = document.getElementById('clear-console');
-const configModal = document.getElementById('config-modal');
+
 const startupCommandInput = document.getElementById('startup-command');
-const saveConfigBtn = document.getElementById('save-config');
+const saveStartupBtn = document.getElementById('save-startup');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     if (token && username) {
         showDashboard();
     } else {
-        showAuth();
+        showPage('login');
     }
+    
+    initializeTabs();
 });
 
 // ============================================
-// AUTH FUNCTIONS
+// PAGE NAVIGATION
 // ============================================
 
-function showAuth() {
-    authPanel.style.display = 'flex';
-    dashboard.style.display = 'none';
+function showPage(page) {
+    // Hide all pages
+    loginPage.classList.remove('active');
+    registerPage.classList.remove('active');
+    dashboardPage.classList.remove('active');
+    consolePage.classList.remove('active');
     
-    // Clear any intervals
-    if (statusUpdateInterval) {
-        clearInterval(statusUpdateInterval);
-        statusUpdateInterval = null;
-    }
-    
-    // Close WebSocket
-    if (ws) {
-        ws.close();
-        ws = null;
+    // Show selected page
+    switch(page) {
+        case 'login':
+            loginPage.classList.add('active');
+            break;
+        case 'register':
+            registerPage.classList.add('active');
+            break;
+        case 'dashboard':
+            dashboardPage.classList.add('active');
+            break;
+        case 'console':
+            consolePage.classList.add('active');
+            break;
     }
 }
 
 function showDashboard() {
-    authPanel.style.display = 'none';
-    dashboard.style.display = 'flex';
+    showPage('dashboard');
     usernameDisplay.textContent = `👤 ${username}`;
     loadServers();
     connectWebSocket();
@@ -78,40 +92,55 @@ function showDashboard() {
     // Start auto-refresh
     if (statusUpdateInterval) clearInterval(statusUpdateInterval);
     statusUpdateInterval = setInterval(() => {
+        loadServers();
         if (selectedServer) {
             updateServerStatus();
         }
-        loadServers();
     }, 5000);
 }
 
-function showError(message) {
-    authError.textContent = message;
-    authError.classList.add('show');
+function showConsolePage(serverName) {
+    selectedServer = serverName;
+    showPage('console');
+    usernameDisplay2.textContent = `👤 ${username}`;
+    consoleServerName.textContent = `🎮 ${serverName}`;
+    
+    // Switch to console tab
+    switchTab('console-tab');
+    
+    // Load server data
+    updateServerStatus();
+    loadConsoleHistory();
+    loadStartupConfig();
+    
+    // Subscribe to WebSocket
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'subscribe', serverName }));
+    }
+}
+
+// ============================================
+// AUTH FUNCTIONS
+// ============================================
+
+function showError(message, isRegister = false) {
+    const errorEl = isRegister ? registerError : authError;
+    errorEl.textContent = message;
+    errorEl.classList.add('show');
     setTimeout(() => {
-        authError.classList.remove('show');
+        errorEl.classList.remove('show');
     }, 5000);
 }
 
-function showNotification(message, type = 'info') {
-    // Simple console notification - you can enhance this with a toast library
-    console.log(`[${type.toUpperCase()}] ${message}`);
-    appendToConsole(`[${type.toUpperCase()}] ${message}\n`);
-}
-
-// Switch between login and register forms
+// Switch between login and register
 showRegisterBtn.addEventListener('click', (e) => {
     e.preventDefault();
-    document.getElementById('login-form').style.display = 'none';
-    document.getElementById('register-form').style.display = 'block';
-    authError.classList.remove('show');
+    showPage('register');
 });
 
 showLoginBtn.addEventListener('click', (e) => {
     e.preventDefault();
-    document.getElementById('register-form').style.display = 'none';
-    document.getElementById('login-form').style.display = 'block';
-    authError.classList.remove('show');
+    showPage('login');
 });
 
 // Login form submission
@@ -126,10 +155,9 @@ loginForm.addEventListener('submit', async (e) => {
         return;
     }
 
-    // Disable submit button
     const submitBtn = loginForm.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
-    submitBtn.textContent = 'Logging in...';
+    submitBtn.textContent = 'LOGGING IN...';
 
     try {
         const response = await fetch('/api/login', {
@@ -155,7 +183,7 @@ loginForm.addEventListener('submit', async (e) => {
         showError('Connection error. Please check if the server is running.');
     } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Login';
+        submitBtn.textContent = 'LOGIN';
     }
 });
 
@@ -168,24 +196,23 @@ registerForm.addEventListener('submit', async (e) => {
     const confirm = document.getElementById('register-confirm').value;
     
     if (!user || !pass || !confirm) {
-        showError('Please fill in all fields');
+        showError('Please fill in all fields', true);
         return;
     }
 
     if (pass.length < 6) {
-        showError('Password must be at least 6 characters long');
+        showError('Password must be at least 6 characters long', true);
         return;
     }
 
     if (pass !== confirm) {
-        showError('Passwords do not match');
+        showError('Passwords do not match', true);
         return;
     }
 
-    // Disable submit button
     const submitBtn = registerForm.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
-    submitBtn.textContent = 'Registering...';
+    submitBtn.textContent = 'REGISTERING...';
 
     try {
         const response = await fetch('/api/register', {
@@ -197,28 +224,24 @@ registerForm.addEventListener('submit', async (e) => {
         const data = await response.json();
 
         if (data.success) {
-            showError('✅ Registration successful! Please login.');
-            document.getElementById('register-form').style.display = 'none';
-            document.getElementById('login-form').style.display = 'block';
             registerForm.reset();
-            
-            // Pre-fill username in login form
+            showPage('login');
             document.getElementById('login-username').value = user;
-            document.getElementById('login-password').focus();
+            showError('✅ Registration successful! Please login.');
         } else {
-            showError(data.error || 'Registration failed');
+            showError(data.error || 'Registration failed', true);
         }
     } catch (error) {
         console.error('Registration error:', error);
-        showError('Connection error. Please check if the server is running.');
+        showError('Connection error. Please check if the server is running.', true);
     } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Register';
+        submitBtn.textContent = 'REGISTER';
     }
 });
 
 // Logout
-logoutBtn.addEventListener('click', () => {
+function handleLogout() {
     if (confirm('Are you sure you want to logout?')) {
         localStorage.removeItem('token');
         localStorage.removeItem('username');
@@ -227,14 +250,22 @@ logoutBtn.addEventListener('click', () => {
         selectedServer = null;
         servers = [];
         
+        if (statusUpdateInterval) {
+            clearInterval(statusUpdateInterval);
+            statusUpdateInterval = null;
+        }
+        
         if (ws) {
             ws.close();
             ws = null;
         }
         
-        showAuth();
+        showPage('login');
     }
-});
+}
+
+logoutBtn.addEventListener('click', handleLogout);
+logoutBtn2.addEventListener('click', handleLogout);
 
 // ============================================
 // SERVER MANAGEMENT
@@ -247,7 +278,6 @@ async function loadServers() {
         });
 
         if (response.status === 401) {
-            // Token expired
             showError('Session expired. Please login again.');
             setTimeout(() => {
                 localStorage.clear();
@@ -261,29 +291,25 @@ async function loadServers() {
         renderServers();
     } catch (error) {
         console.error('Failed to load servers:', error);
-        serversContainer.innerHTML = '<p class="loading">❌ Failed to load servers. Check connection.</p>';
+        serversGrid.innerHTML = '<p class="loading">❌ Failed to load servers. Check connection.</p>';
     }
 }
 
 function renderServers() {
     if (servers.length === 0) {
-        serversContainer.innerHTML = '<p class="loading">🔍 No servers found<br><small>Add server folders to minecraft-servers/</small></p>';
+        serversGrid.innerHTML = '<p class="loading">🔍 No servers found<br><small>Add server folders to minecraft-servers/</small></p>';
         return;
     }
 
-    serversContainer.innerHTML = '';
+    serversGrid.innerHTML = '';
     
     servers.forEach(server => {
-        const serverItem = document.createElement('div');
-        serverItem.className = 'server-item';
-        if (selectedServer === server.name) {
-            serverItem.classList.add('active');
-        }
+        const serverCard = document.createElement('div');
+        serverCard.className = 'server-card';
 
         const statusClass = server.status.running ? 'online' : 'offline';
         const statusText = server.status.running ? 'Online' : 'Offline';
         
-        // Calculate uptime if running
         let uptimeText = '';
         if (server.status.running && server.status.uptime) {
             const seconds = Math.floor(server.status.uptime / 1000);
@@ -291,75 +317,51 @@ function renderServers() {
             const hours = Math.floor(minutes / 60);
             
             if (hours > 0) {
-                uptimeText = `<small style="color: #10b981;">⏱ ${hours}h ${minutes % 60}m uptime</small>`;
+                uptimeText = `⏱ ${hours}h ${minutes % 60}m uptime`;
             } else if (minutes > 0) {
-                uptimeText = `<small style="color: #10b981;">⏱ ${minutes}m uptime</small>`;
+                uptimeText = `⏱ ${minutes}m uptime`;
             } else {
-                uptimeText = `<small style="color: #10b981;">⏱ ${seconds}s uptime</small>`;
+                uptimeText = `⏱ ${seconds}s uptime`;
             }
         }
 
-        serverItem.innerHTML = `
-            <div class="server-item-name">🎮 ${server.name}</div>
-            <div class="server-item-status">
-                <span class="status-indicator ${statusClass}"></span>
-                ${statusText}
+        serverCard.innerHTML = `
+            <div class="server-card-header">
+                <div class="server-card-name">🎮 ${server.name}</div>
             </div>
-            ${uptimeText}
+            <div class="server-card-status">
+                <span class="status-badge ${statusClass}">● ${statusText}</span>
+            </div>
+            ${uptimeText ? `<div class="server-card-uptime">${uptimeText}</div>` : ''}
         `;
 
-        serverItem.addEventListener('click', () => selectServer(server.name));
-        serversContainer.appendChild(serverItem);
+        serverCard.addEventListener('click', () => showConsolePage(server.name));
+        serversGrid.appendChild(serverCard);
     });
 }
 
-// UPDATED: Load console logs from backend
-async function selectServer(serverName) {
-    selectedServer = serverName;
-    renderServers();
-    showServerDetails();
-    updateServerStatus();
+// Refresh servers button
+refreshServersBtn.addEventListener('click', async () => {
+    refreshServersBtn.disabled = true;
+    refreshServersBtn.textContent = '🔄 Refreshing...';
     
-    // Clear console first
-    consoleOutput.textContent = '';
-    appendToConsole(`[INFO] Connected to ${serverName}\n`);
+    await loadServers();
     
-    // Load existing console logs from backend
-    try {
-        const response = await fetch(`/api/servers/${serverName}/logs`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            if (data.logs && data.logs.length > 0) {
-                // Display all stored logs
-                data.logs.forEach(log => {
-                    consoleOutput.textContent += log;
-                });
-                consoleOutput.scrollTop = consoleOutput.scrollHeight;
-            } else {
-                appendToConsole(`[INFO] Console output will appear here...\n\n`);
-            }
-        } else {
-            appendToConsole(`[INFO] Console output will appear here...\n\n`);
-        }
-    } catch (error) {
-        console.error('Failed to load console logs:', error);
-        appendToConsole(`[INFO] Console output will appear here...\n\n`);
-    }
-    
-    // Subscribe to WebSocket for real-time updates
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'subscribe', serverName }));
-    }
-}
+    setTimeout(() => {
+        refreshServersBtn.disabled = false;
+        refreshServersBtn.textContent = '🔄 Refresh';
+    }, 1000);
+});
 
-function showServerDetails() {
-    noServerSelected.style.display = 'none';
-    serverDetails.style.display = 'flex';
-    selectedServerName.textContent = `🎮 ${selectedServer}`;
-}
+// Back to dashboard
+backToDashboardBtn.addEventListener('click', () => {
+    selectedServer = null;
+    showDashboard();
+});
+
+// ============================================
+// SERVER CONSOLE
+// ============================================
 
 async function updateServerStatus() {
     if (!selectedServer) return;
@@ -374,15 +376,29 @@ async function updateServerStatus() {
         const data = await response.json();
         
         if (data.status.running) {
-            serverStatus.textContent = '● Online';
-            serverStatus.className = 'status-badge online';
+            consoleServerStatus.textContent = '● Online';
+            consoleServerStatus.className = 'status-badge online';
             startServerBtn.disabled = true;
             stopServerBtn.disabled = false;
             commandInput.disabled = false;
             sendCommandBtn.disabled = false;
+            
+            // Update uptime
+            const seconds = Math.floor(data.status.uptime / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            
+            if (hours > 0) {
+                consoleServerUptime.textContent = `Uptime: ${hours}h ${minutes % 60}m`;
+            } else if (minutes > 0) {
+                consoleServerUptime.textContent = `Uptime: ${minutes}m ${seconds % 60}s`;
+            } else {
+                consoleServerUptime.textContent = `Uptime: ${seconds}s`;
+            }
         } else {
-            serverStatus.textContent = '● Offline';
-            serverStatus.className = 'status-badge offline';
+            consoleServerStatus.textContent = '● Offline';
+            consoleServerStatus.className = 'status-badge offline';
+            consoleServerUptime.textContent = 'Uptime: 0s';
             startServerBtn.disabled = false;
             stopServerBtn.disabled = true;
             commandInput.disabled = true;
@@ -393,54 +409,40 @@ async function updateServerStatus() {
     }
 }
 
-// Refresh servers button
-refreshServersBtn.addEventListener('click', async () => {
-    refreshServersBtn.disabled = true;
-    refreshServersBtn.textContent = '🔄 Refreshing...';
+async function loadConsoleHistory() {
+    consoleOutput.textContent = '';
+    appendToConsole(`[INFO] Connected to ${selectedServer}\n`);
     
-    await loadServers();
-    
-    // UPDATED: Reload console logs for currently selected server
-    if (selectedServer) {
-        try {
-            const response = await fetch(`/api/servers/${selectedServer}/logs`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                
-                // Clear and reload console
-                consoleOutput.textContent = '';
-                appendToConsole(`[INFO] Connected to ${selectedServer}\n`);
-                
-                if (data.logs && data.logs.length > 0) {
-                    data.logs.forEach(log => {
-                        consoleOutput.textContent += log;
-                    });
-                    consoleOutput.scrollTop = consoleOutput.scrollHeight;
-                    appendToConsole(`\n[INFO] Console refreshed (${data.logs.length} entries)\n`);
-                } else {
-                    appendToConsole(`[INFO] No console history available\n\n`);
-                }
+    try {
+        const response = await fetch(`/api/servers/${selectedServer}/logs`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.logs && data.logs.length > 0) {
+                data.logs.forEach(log => {
+                    consoleOutput.textContent += log;
+                });
+                consoleOutput.scrollTop = consoleOutput.scrollHeight;
+            } else {
+                appendToConsole(`[INFO] Console output will appear here...\n\n`);
             }
-        } catch (error) {
-            console.error('Failed to reload console logs:', error);
+        } else {
+            appendToConsole(`[INFO] Console output will appear here...\n\n`);
         }
+    } catch (error) {
+        console.error('Failed to load console logs:', error);
+        appendToConsole(`[INFO] Console output will appear here...\n\n`);
     }
-    
-    setTimeout(() => {
-        refreshServersBtn.disabled = false;
-        refreshServersBtn.textContent = '🔄 Refresh';
-    }, 1000);
-});
+}
 
 // Start server
 startServerBtn.addEventListener('click', async () => {
     if (!selectedServer) return;
 
     startServerBtn.disabled = true;
-    startServerBtn.textContent = '⏳ Starting...';
+    startServerBtn.textContent = 'Starting...';
 
     try {
         const response = await fetch(`/api/servers/${selectedServer}/start`, {
@@ -452,16 +454,12 @@ startServerBtn.addEventListener('click', async () => {
         
         if (data.success) {
             appendToConsole('[INFO] ▶ Server starting...\n');
-            showNotification('Server starting...', 'success');
-            
-            // Update status after delay
             setTimeout(() => {
                 updateServerStatus();
                 loadServers();
             }, 2000);
         } else {
             appendToConsole(`[ERROR] ❌ ${data.error}\n`);
-            showNotification(data.error, 'error');
         }
     } catch (error) {
         console.error('Start server error:', error);
@@ -469,7 +467,7 @@ startServerBtn.addEventListener('click', async () => {
     } finally {
         setTimeout(() => {
             startServerBtn.disabled = false;
-            startServerBtn.textContent = '▶ Start';
+            startServerBtn.textContent = 'Start';
         }, 2000);
     }
 });
@@ -481,7 +479,7 @@ stopServerBtn.addEventListener('click', async () => {
     if (!confirm(`Stop server "${selectedServer}"?`)) return;
 
     stopServerBtn.disabled = true;
-    stopServerBtn.textContent = '⏳ Stopping...';
+    stopServerBtn.textContent = 'Stopping...';
 
     try {
         const response = await fetch(`/api/servers/${selectedServer}/stop`, {
@@ -493,16 +491,12 @@ stopServerBtn.addEventListener('click', async () => {
         
         if (data.success) {
             appendToConsole('[INFO] ⏹ Stopping server...\n');
-            showNotification('Server stopping...', 'info');
-            
-            // Update status after delay
             setTimeout(() => {
                 updateServerStatus();
                 loadServers();
             }, 2000);
         } else {
             appendToConsole(`[ERROR] ❌ ${data.error}\n`);
-            showNotification(data.error, 'error');
         }
     } catch (error) {
         console.error('Stop server error:', error);
@@ -510,7 +504,7 @@ stopServerBtn.addEventListener('click', async () => {
     } finally {
         setTimeout(() => {
             stopServerBtn.disabled = false;
-            stopServerBtn.textContent = '⏹ Stop';
+            stopServerBtn.textContent = 'Stop';
         }, 2000);
     }
 });
@@ -552,9 +546,8 @@ async function sendCommand() {
 
     const command = commandInput.value.trim();
     
-    // Add to history
     commandHistory.push(command);
-    if (commandHistory.length > 50) commandHistory.shift(); // Keep last 50 commands
+    if (commandHistory.length > 50) commandHistory.shift();
     historyIndex = -1;
 
     try {
@@ -594,10 +587,10 @@ function appendToConsole(text) {
 }
 
 // ============================================
-// CONFIG MODAL
+// STARTUP CONFIG
 // ============================================
 
-configServerBtn.addEventListener('click', async () => {
+async function loadStartupConfig() {
     if (!selectedServer) return;
 
     try {
@@ -607,14 +600,12 @@ configServerBtn.addEventListener('click', async () => {
 
         const data = await response.json();
         startupCommandInput.value = data.config.startupCommand;
-        configModal.classList.add('show');
     } catch (error) {
         console.error('Failed to load config:', error);
-        alert('Failed to load configuration');
     }
-});
+}
 
-saveConfigBtn.addEventListener('click', async () => {
+saveStartupBtn.addEventListener('click', async () => {
     if (!selectedServer) return;
 
     const command = startupCommandInput.value.trim();
@@ -624,8 +615,8 @@ saveConfigBtn.addEventListener('click', async () => {
         return;
     }
 
-    saveConfigBtn.disabled = true;
-    saveConfigBtn.textContent = 'Saving...';
+    saveStartupBtn.disabled = true;
+    saveStartupBtn.textContent = 'Saving...';
 
     try {
         const response = await fetch(`/api/servers/${selectedServer}/config`, {
@@ -640,9 +631,8 @@ saveConfigBtn.addEventListener('click', async () => {
         const data = await response.json();
         
         if (data.success) {
-            configModal.classList.remove('show');
             appendToConsole('[INFO] ⚙️ Configuration updated successfully\n');
-            showNotification('Configuration saved', 'success');
+            alert('Configuration saved successfully!');
         } else {
             alert('Failed to update config: ' + data.error);
         }
@@ -650,24 +640,38 @@ saveConfigBtn.addEventListener('click', async () => {
         console.error('Save config error:', error);
         alert('Failed to save configuration');
     } finally {
-        saveConfigBtn.disabled = false;
-        saveConfigBtn.textContent = 'Save';
+        saveStartupBtn.disabled = false;
+        saveStartupBtn.textContent = 'Save Changes';
     }
 });
 
-// Close modal
-document.querySelectorAll('.modal-close').forEach(btn => {
-    btn.addEventListener('click', () => {
-        configModal.classList.remove('show');
+// ============================================
+// TABS
+// ============================================
+
+function initializeTabs() {
+    const tabButtons = document.querySelectorAll('.tab-button');
+    
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const targetTab = button.getAttribute('data-tab');
+            switchTab(targetTab);
+        });
     });
-});
+}
 
-// Close modal on outside click
-configModal.addEventListener('click', (e) => {
-    if (e.target === configModal) {
-        configModal.classList.remove('show');
-    }
-});
+function switchTab(tabId) {
+    // Remove active class from all tabs and buttons
+    document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+    
+    // Add active class to selected tab and button
+    const selectedButton = document.querySelector(`[data-tab="${tabId}"]`);
+    const selectedPane = document.getElementById(tabId);
+    
+    if (selectedButton) selectedButton.classList.add('active');
+    if (selectedPane) selectedPane.classList.add('active');
+}
 
 // ============================================
 // WEBSOCKET CONNECTION
@@ -681,10 +685,8 @@ function connectWebSocket() {
         console.log('✅ WebSocket connected');
         reconnectAttempts = 0;
         
-        // Authenticate
         ws.send(JSON.stringify({ type: 'auth', token }));
         
-        // Subscribe to selected server
         if (selectedServer) {
             ws.send(JSON.stringify({ type: 'subscribe', serverName: selectedServer }));
             appendToConsole('[INFO] 🔌 Connected to console stream\n');
@@ -711,7 +713,6 @@ function connectWebSocket() {
     ws.onclose = () => {
         console.log('🔌 WebSocket disconnected');
         
-        // Attempt to reconnect
         if (token && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
             reconnectAttempts++;
             console.log(`Reconnecting... (Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
@@ -730,32 +731,9 @@ function connectWebSocket() {
 }
 
 // ============================================
-// UTILITY FUNCTIONS
+// CLEANUP
 // ============================================
 
-// Format file size
-function formatBytes(bytes) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-}
-
-// Format uptime
-function formatUptime(ms) {
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-    
-    if (days > 0) return `${days}d ${hours % 24}h`;
-    if (hours > 0) return `${hours}h ${minutes % 60}m`;
-    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
-    return `${seconds}s`;
-}
-
-// Clean up on page unload
 window.addEventListener('beforeunload', () => {
     if (statusUpdateInterval) {
         clearInterval(statusUpdateInterval);
