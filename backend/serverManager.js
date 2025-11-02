@@ -168,6 +168,17 @@ class ServerManager extends EventEmitter {
     }
   }
 
+  // NEW: Get server console logs
+  getServerLogs(serverName) {
+    const serverInfo = this.servers.get(serverName);
+    
+    if (!serverInfo) {
+      return [];
+    }
+    
+    return serverInfo.logs || [];
+  }
+
   // Start a Minecraft server
   async startServer(serverName) {
     try {
