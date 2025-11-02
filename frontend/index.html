@@ -7,134 +7,161 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Login/Register Panel -->
-    <div id="auth-panel" class="auth-panel">
-        <div class="auth-container">
-            <h1>🎮 Minecraft Server Controller</h1>
+    <!-- Login Page -->
+    <div id="login-page" class="page">
+        <div class="login-container">
+            <div class="login-card">
+                <div class="login-logo">
+                    <h1>🎮 Minecraft Server Controller</h1>
+                </div>
+                
+                <div class="login-form-wrapper">
+                    <h2>Login to Continue</h2>
+                    
+                    <form id="loginForm">
+                        <div class="form-group">
+                            <label>USERNAME OR EMAIL</label>
+                            <input type="text" id="login-username" required autocomplete="username">
+                        </div>
+                        <div class="form-group">
+                            <label>PASSWORD</label>
+                            <input type="password" id="login-password" required autocomplete="current-password">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block">LOGIN</button>
+                    </form>
+                    
+                    <div class="login-footer">
+                        <a href="#" id="show-register">Don't have an account? Register</a>
+                    </div>
+                </div>
+            </div>
             
-            <div id="login-form" class="auth-form">
-                <h2>Login</h2>
-                <form id="loginForm">
-                    <div class="form-group">
-                        <label for="login-username">Username</label>
-                        <input type="text" id="login-username" required autocomplete="username">
-                    </div>
-                    <div class="form-group">
-                        <label for="login-password">Password</label>
-                        <input type="password" id="login-password" required autocomplete="current-password">
-                    </div>
-                    <button type="submit" class="btn btn-primary">Login</button>
-                    <p class="auth-switch">
-                        Don't have an account? 
-                        <a href="#" id="show-register">Register</a>
-                    </p>
-                </form>
-            </div>
-
-            <div id="register-form" class="auth-form" style="display: none;">
-                <h2>Register</h2>
-                <form id="registerForm">
-                    <div class="form-group">
-                        <label for="register-username">Username</label>
-                        <input type="text" id="register-username" required autocomplete="username">
-                    </div>
-                    <div class="form-group">
-                        <label for="register-password">Password</label>
-                        <input type="password" id="register-password" required autocomplete="new-password">
-                    </div>
-                    <div class="form-group">
-                        <label for="register-confirm">Confirm Password</label>
-                        <input type="password" id="register-confirm" required autocomplete="new-password">
-                    </div>
-                    <button type="submit" class="btn btn-primary">Register</button>
-                    <p class="auth-switch">
-                        Already have an account? 
-                        <a href="#" id="show-login">Login</a>
-                    </p>
-                </form>
-            </div>
-
             <div id="auth-error" class="error-message"></div>
         </div>
     </div>
 
-    <!-- Main Dashboard -->
-    <div id="dashboard" class="dashboard" style="display: none;">
-        <header class="dashboard-header">
-            <h1>🎮 Minecraft Server Controller</h1>
-            <div class="user-info">
-                <span id="username-display"></span>
-                <button id="logout-btn" class="btn btn-secondary">Logout</button>
+    <!-- Register Page -->
+    <div id="register-page" class="page" style="display: none;">
+        <div class="login-container">
+            <div class="login-card">
+                <div class="login-logo">
+                    <h1>🎮 Minecraft Server Controller</h1>
+                </div>
+                
+                <div class="login-form-wrapper">
+                    <h2>Create Account</h2>
+                    
+                    <form id="registerForm">
+                        <div class="form-group">
+                            <label>USERNAME</label>
+                            <input type="text" id="register-username" required autocomplete="username">
+                        </div>
+                        <div class="form-group">
+                            <label>PASSWORD</label>
+                            <input type="password" id="register-password" required autocomplete="new-password">
+                        </div>
+                        <div class="form-group">
+                            <label>CONFIRM PASSWORD</label>
+                            <input type="password" id="register-confirm" required autocomplete="new-password">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block">REGISTER</button>
+                    </form>
+                    
+                    <div class="login-footer">
+                        <a href="#" id="show-login">Already have an account? Login</a>
+                    </div>
+                </div>
             </div>
-        </header>
-
-        <div class="dashboard-content">
-            <!-- Server List -->
-            <aside class="server-list">
-                <div class="server-list-header">
-                    <h2>Servers</h2>
-                    <button id="refresh-servers" class="btn btn-small">🔄 Refresh</button>
-                </div>
-                <div id="servers-container" class="servers-container">
-                    <p class="loading">Loading servers...</p>
-                </div>
-            </aside>
-
-            <!-- Server Console -->
-            <main class="server-console">
-                <div id="no-server-selected" class="no-server">
-                    <h2>No Server Selected</h2>
-                    <p>Select a server from the list to view its console and controls.</p>
-                </div>
-
-                <div id="server-details" class="server-details" style="display: none;">
-                    <div class="server-header">
-                        <div class="server-info">
-                            <h2 id="selected-server-name"></h2>
-                            <span id="server-status" class="status-badge">Offline</span>
-                        </div>
-                        <div class="server-controls">
-                            <button id="start-server" class="btn btn-success">▶ Start</button>
-                            <button id="stop-server" class="btn btn-danger">⏹ Stop</button>
-                            <button id="config-server" class="btn btn-secondary">⚙️ Config</button>
-                        </div>
-                    </div>
-
-                    <div class="console-container">
-                        <div class="console-header">
-                            <h3>Console Output</h3>
-                            <button id="clear-console" class="btn btn-small">Clear</button>
-                        </div>
-                        <pre id="console-output" class="console-output"></pre>
-                    </div>
-
-                    <div class="command-input">
-                        <input type="text" id="command-input" placeholder="Enter command..." autocomplete="off">
-                        <button id="send-command" class="btn btn-primary">Send</button>
-                    </div>
-                </div>
-            </main>
+            
+            <div id="register-error" class="error-message"></div>
         </div>
     </div>
 
-    <!-- Config Modal -->
-    <div id="config-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Server Configuration</h2>
-                <button class="modal-close">&times;</button>
+    <!-- Dashboard Page -->
+    <div id="dashboard-page" class="page" style="display: none;">
+        <nav class="navbar">
+            <div class="navbar-brand">
+                <h1>🎮 Minecraft Server Controller</h1>
             </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label for="startup-command">Startup Command</label>
-                    <input type="text" id="startup-command" class="full-width" 
-                           placeholder="java -Xmx1024M -Xms1024M -jar server.jar nogui">
-                    <small>Example: java -Xmx2G -Xms2G -jar server.jar nogui</small>
+            <div class="navbar-user">
+                <span id="username-display"></span>
+                <button id="logout-btn" class="btn btn-secondary btn-sm">Logout</button>
+            </div>
+        </nav>
+
+        <div class="container">
+            <div class="page-header">
+                <h2>Your Servers</h2>
+                <button id="refresh-servers" class="btn btn-secondary">🔄 Refresh</button>
+            </div>
+
+            <div id="servers-grid" class="servers-grid">
+                <p class="loading">Loading servers...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Console Page -->
+    <div id="console-page" class="page" style="display: none;">
+        <nav class="navbar">
+            <div class="navbar-brand">
+                <button id="back-to-dashboard" class="btn btn-secondary btn-sm">← Back</button>
+                <h1 id="console-server-name">Server Name</h1>
+            </div>
+            <div class="navbar-user">
+                <span id="username-display-2"></span>
+                <button id="logout-btn-2" class="btn btn-secondary btn-sm">Logout</button>
+            </div>
+        </nav>
+
+        <div class="container">
+            <div class="server-header">
+                <div class="server-info">
+                    <span id="console-server-status" class="status-badge offline">● Offline</span>
+                    <span id="console-server-uptime" class="uptime-badge">Uptime: 0s</span>
+                </div>
+                <div class="server-controls">
+                    <button id="start-server" class="btn btn-success">Start</button>
+                    <button id="stop-server" class="btn btn-danger">Stop</button>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button id="save-config" class="btn btn-primary">Save</button>
-                <button class="modal-close btn btn-secondary">Cancel</button>
+
+            <div class="tabs">
+                <button class="tab-button active" data-tab="console-tab">Console</button>
+                <button class="tab-button" data-tab="startup-tab">Startup</button>
+            </div>
+
+            <div class="tab-content">
+                <!-- Console Tab -->
+                <div id="console-tab" class="tab-pane active">
+                    <div class="console-wrapper">
+                        <div class="console-header">
+                            <span>Console Output</span>
+                            <button id="clear-console" class="btn btn-sm btn-secondary">Clear</button>
+                        </div>
+                        <pre id="console-output" class="console-output"></pre>
+                    </div>
+                    <div class="command-input-wrapper">
+                        <input type="text" id="command-input" placeholder="Type a command..." autocomplete="off">
+                        <button id="send-command" class="btn btn-primary">Send</button>
+                    </div>
+                </div>
+
+                <!-- Startup Tab -->
+                <div id="startup-tab" class="tab-pane">
+                    <div class="startup-wrapper">
+                        <h3>Startup Command</h3>
+                        <p class="help-text">Edit the command used to start this server.</p>
+                        
+                        <div class="form-group">
+                            <label>STARTUP COMMAND</label>
+                            <input type="text" id="startup-command" class="form-control" 
+                                   placeholder="java -Xmx1024M -Xms1024M -jar server.jar nogui">
+                        </div>
+                        
+                        <button id="save-startup" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
