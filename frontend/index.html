@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Server Controller</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Login/Register Panel -->
+    <div id="auth-panel" class="auth-panel">
+        <div class="auth-container">
+            <h1>🎮 Minecraft Server Controller</h1>
+            
+            <div id="login-form" class="auth-form">
+                <h2>Login</h2>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="login-username">Username</label>
+                        <input type="text" id="login-username" required autocomplete="username">
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">Password</label>
+                        <input type="password" id="login-password" required autocomplete="current-password">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Login</button>
+                    <p class="auth-switch">
+                        Don't have an account? 
+                        <a href="#" id="show-register">Register</a>
+                    </p>
+                </form>
+            </div>
+
+            <div id="register-form" class="auth-form" style="display: none;">
+                <h2>Register</h2>
+                <form id="registerForm">
+                    <div class="form-group">
+                        <label for="register-username">Username</label>
+                        <input type="text" id="register-username" required autocomplete="username">
+                    </div>
+                    <div class="form-group">
+                        <label for="register-password">Password</label>
+                        <input type="password" id="register-password" required autocomplete="new-password">
+                    </div>
+                    <div class="form-group">
+                        <label for="register-confirm">Confirm Password</label>
+                        <input type="password" id="register-confirm" required autocomplete="new-password">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Register</button>
+                    <p class="auth-switch">
+                        Already have an account? 
+                        <a href="#" id="show-login">Login</a>
+                    </p>
+                </form>
+            </div>
+
+            <div id="auth-error" class="error-message"></div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div id="dashboard" class="dashboard" style="display: none;">
+        <header class="dashboard-header">
+            <h1>🎮 Minecraft Server Controller</h1>
+            <div class="user-info">
+                <span id="username-display"></span>
+                <button id="logout-btn" class="btn btn-secondary">Logout</button>
+            </div>
+        </header>
+
+        <div class="dashboard-content">
+            <!-- Server List -->
+            <aside class="server-list">
+                <div class="server-list-header">
+                    <h2>Servers</h2>
+                    <button id="refresh-servers" class="btn btn-small">🔄 Refresh</button>
+                </div>
+                <div id="servers-container" class="servers-container">
+                    <p class="loading">Loading servers...</p>
+                </div>
+            </aside>
+
+            <!-- Server Console -->
+            <main class="server-console">
+                <div id="no-server-selected" class="no-server">
+                    <h2>No Server Selected</h2>
+                    <p>Select a server from the list to view its console and controls.</p>
+                </div>
+
+                <div id="server-details" class="server-details" style="display: none;">
+                    <div class="server-header">
+                        <div class="server-info">
+                            <h2 id="selected-server-name"></h2>
+                            <span id="server-status" class="status-badge">Offline</span>
+                        </div>
+                        <div class="server-controls">
+                            <button id="start-server" class="btn btn-success">▶ Start</button>
+                            <button id="stop-server" class="btn btn-danger">⏹ Stop</button>
+                            <button id="config-server" class="btn btn-secondary">⚙️ Config</button>
+                        </div>
+                    </div>
+
+                    <div class="console-container">
+                        <div class="console-header">
+                            <h3>Console Output</h3>
+                            <button id="clear-console" class="btn btn-small">Clear</button>
+                        </div>
+                        <pre id="console-output" class="console-output"></pre>
+                    </div>
+
+                    <div class="command-input">
+                        <input type="text" id="command-input" placeholder="Enter command..." autocomplete="off">
+                        <button id="send-command" class="btn btn-primary">Send</button>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Config Modal -->
+    <div id="config-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Server Configuration</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="startup-command">Startup Command</label>
+                    <input type="text" id="startup-command" class="full-width" 
+                           placeholder="java -Xmx1024M -Xms1024M -jar server.jar nogui">
+                    <small>Example: java -Xmx2G -Xms2G -jar server.jar nogui</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="save-config" class="btn btn-primary">Save</button>
+                <button class="modal-close btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
