@@ -162,6 +162,18 @@ app.post('/api/servers/:serverName/config', auth.verifyToken, async (req, res) =
   }
 });
 
+// NEW: Get server console logs
+app.get('/api/servers/:serverName/logs', auth.verifyToken, async (req, res) => {
+  try {
+    const { serverName } = req.params;
+    const logs = serverManager.getServerLogs(serverName);
+    res.json({ logs: logs || [] });
+  } catch (error) {
+    console.error('Failed to get server logs:', error);
+    res.status(500).json({ error: 'Failed to get server logs' });
+  }
+});
+
 // WebSocket for console output
 wss.on('connection', (ws, req) => {
   console.log('WebSocket client connected');
