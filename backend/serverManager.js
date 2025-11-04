@@ -14,6 +14,14 @@ class ServerManager extends EventEmitter {
     this.configs = {};
   }
 
+  // Strip ANSI escape codes for clean console output
+  stripAnsiCodes(text) {
+    return text
+      .replace(/\u001b\[[0-9;]*m/g, '')  // Remove color codes
+      .replace(/\u001b\[[0-9;]*[A-Za-z]/g, '') // Remove other ANSI sequences
+      .replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, ''); // Remove control characters except \n and \t
+  }
+
   // Initialize server manager
   async initialize() {
     try {
@@ -168,7 +176,7 @@ class ServerManager extends EventEmitter {
     }
   }
 
-  // NEW: Get server console logs
+  // Get server console logs
   getServerLogs(serverName) {
     const serverInfo = this.servers.get(serverName);
     
@@ -219,12 +227,15 @@ class ServerManager extends EventEmitter {
       // Handle stdout
       serverProcess.stdout.on('data', (data) => {
         const output = data.toString();
-        this.emit('console', serverName, output);
+        const cleanOutput = this.stripAnsiCodes(output);
         
-        // Store last 1000 lines
+        // Emit clean output to WebSocket clients
+        this.emit('console', serverName, cleanOutput);
+        
+        // Store last 1000 lines (clean version)
         const serverInfo = this.servers.get(serverName);
         if (serverInfo) {
-          serverInfo.logs.push(output);
+          serverInfo.logs.push(cleanOutput);
           if (serverInfo.logs.length > 1000) {
             serverInfo.logs.shift();
           }
@@ -234,7 +245,8 @@ class ServerManager extends EventEmitter {
       // Handle stderr
       serverProcess.stderr.on('data', (data) => {
         const output = data.toString();
-        this.emit('console', serverName, `[ERROR] ${output}`);
+        const cleanOutput = this.stripAnsiCodes(output);
+        this.emit('console', serverName, `[ERROR] ${cleanOutput}`);
       });
 
       // Handle process exit
