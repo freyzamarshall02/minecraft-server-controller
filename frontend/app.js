@@ -6,6 +6,7 @@ let ws = null;
 let servers = [];
 let statusUpdateInterval = null;
 let reconnectAttempts = 0;
+let reconnectTimeout = null;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
 // DOM Elements
@@ -84,22 +85,34 @@ function showPage(page) {
 }
 
 function showDashboard() {
+    // Unsubscribe from previous server if any
+    if (selectedServer && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'unsubscribe', serverName: selectedServer }));
+    }
+    selectedServer = null;
+    
     showPage('dashboard');
     usernameDisplay.textContent = `👤 ${username}`;
     loadServers();
-    connectWebSocket();
+    
+    // Connect WebSocket if not connected
+    if (!ws || ws.readyState === WebSocket.CLOSED) {
+        connectWebSocket();
+    }
     
     // Start auto-refresh
     if (statusUpdateInterval) clearInterval(statusUpdateInterval);
     statusUpdateInterval = setInterval(() => {
         loadServers();
-        if (selectedServer) {
-            updateServerStatus();
-        }
     }, 5000);
 }
 
 function showConsolePage(serverName) {
+    // Unsubscribe from previous server if different
+    if (selectedServer && selectedServer !== serverName && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'unsubscribe', serverName: selectedServer }));
+    }
+    
     selectedServer = serverName;
     showPage('console');
     usernameDisplay2.textContent = `👤 ${username}`;
@@ -113,10 +126,19 @@ function showConsolePage(serverName) {
     loadConsoleHistory();
     loadStartupConfig();
     
-    // Subscribe to WebSocket
+    // Subscribe to WebSocket if connected
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'subscribe', serverName }));
+    } else if (!ws || ws.readyState === WebSocket.CLOSED) {
+        // Reconnect if WebSocket is closed
+        connectWebSocket();
     }
+    
+    // Start status updates for console page
+    if (statusUpdateInterval) clearInterval(statusUpdateInterval);
+    statusUpdateInterval = setInterval(() => {
+        updateServerStatus();
+    }, 5000);
 }
 
 // ============================================
@@ -174,6 +196,10 @@ loginForm.addEventListener('submit', async (e) => {
             localStorage.setItem('token', token);
             localStorage.setItem('username', username);
             loginForm.reset();
+            
+            // Reset reconnect attempts on new login
+            reconnectAttempts = 0;
+            
             showDashboard();
         } else {
             showError(data.error || 'Login failed');
@@ -243,22 +269,36 @@ registerForm.addEventListener('submit', async (e) => {
 // Logout
 function handleLogout() {
     if (confirm('Are you sure you want to logout?')) {
+        // Cleanup intervals
+        if (statusUpdateInterval) {
+            clearInterval(statusUpdateInterval);
+            statusUpdateInterval = null;
+        }
+        
+        // Cleanup reconnect timeout
+        if (reconnectTimeout) {
+            clearTimeout(reconnectTimeout);
+            reconnectTimeout = null;
+        }
+        
+        // Cleanup WebSocket
+        if (ws) {
+            // Unsubscribe before closing
+            if (selectedServer && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'unsubscribe', serverName: selectedServer }));
+            }
+            ws.close();
+            ws = null;
+        }
+        
+        // Clear local storage and state
         localStorage.removeItem('token');
         localStorage.removeItem('username');
         token = null;
         username = null;
         selectedServer = null;
         servers = [];
-        
-        if (statusUpdateInterval) {
-            clearInterval(statusUpdateInterval);
-            statusUpdateInterval = null;
-        }
-        
-        if (ws) {
-            ws.close();
-            ws = null;
-        }
+        reconnectAttempts = 0;
         
         showPage('login');
     }
@@ -280,8 +320,7 @@ async function loadServers() {
         if (response.status === 401) {
             showError('Session expired. Please login again.');
             setTimeout(() => {
-                localStorage.clear();
-                window.location.reload();
+                handleLogout();
             }, 2000);
             return;
         }
@@ -355,7 +394,6 @@ refreshServersBtn.addEventListener('click', async () => {
 
 // Back to dashboard
 backToDashboardBtn.addEventListener('click', () => {
-    selectedServer = null;
     showDashboard();
 });
 
@@ -582,8 +620,19 @@ clearConsoleBtn.addEventListener('click', () => {
 });
 
 function appendToConsole(text) {
-    consoleOutput.textContent += text;
+    // Strip ANSI color codes and special characters
+    const cleanText = stripAnsiCodes(text);
+    consoleOutput.textContent += cleanText;
     consoleOutput.scrollTop = consoleOutput.scrollHeight;
+}
+
+// Strip ANSI escape codes for clean console output
+function stripAnsiCodes(text) {
+    // Remove ANSI color codes (e.g., \u001b[0m, \u001b[31m, etc.)
+    return text
+        .replace(/\u001b\[[0-9;]*m/g, '')  // Remove color codes
+        .replace(/\u001b\[[0-9;]*[A-Za-z]/g, '') // Remove other ANSI sequences
+        .replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, ''); // Remove other control characters except \n and \t
 }
 
 // ============================================
@@ -678,6 +727,13 @@ function switchTab(tabId) {
 // ============================================
 
 function connectWebSocket() {
+    // Don't create duplicate connections
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
+        console.log('⚠️ WebSocket already connected or connecting');
+        return;
+    }
+    
+    console.log('🔌 Connecting to WebSocket...');
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(`${protocol}//${window.location.host}`);
 
@@ -685,8 +741,10 @@ function connectWebSocket() {
         console.log('✅ WebSocket connected');
         reconnectAttempts = 0;
         
+        // Authenticate
         ws.send(JSON.stringify({ type: 'auth', token }));
         
+        // Subscribe to current server if on console page
         if (selectedServer) {
             ws.send(JSON.stringify({ type: 'subscribe', serverName: selectedServer }));
             appendToConsole('[INFO] 🔌 Connected to console stream\n');
@@ -699,8 +757,10 @@ function connectWebSocket() {
             
             if (data.type === 'auth') {
                 if (!data.success) {
-                    console.error('WebSocket authentication failed');
+                    console.error('❌ WebSocket authentication failed');
                     ws.close();
+                } else {
+                    console.log('✅ WebSocket authenticated');
                 }
             } else if (data.type === 'console' && data.serverName === selectedServer) {
                 appendToConsole(data.data);
@@ -710,23 +770,36 @@ function connectWebSocket() {
         }
     };
 
-    ws.onclose = () => {
-        console.log('🔌 WebSocket disconnected');
+    ws.onclose = (event) => {
+        console.log('🔌 WebSocket disconnected', event.code, event.reason);
+        ws = null;
         
+        // Only attempt reconnect if user is still logged in and not at max attempts
         if (token && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
             reconnectAttempts++;
-            console.log(`Reconnecting... (Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+            const delay = Math.min(3000 * reconnectAttempts, 15000); // Max 15 seconds
+            console.log(`🔄 Reconnecting in ${delay/1000}s... (Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
             
-            setTimeout(() => {
-                if (token) connectWebSocket();
-            }, 3000 * reconnectAttempts);
+            // Clear any existing reconnect timeout
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+            }
+            
+            reconnectTimeout = setTimeout(() => {
+                if (token) {
+                    connectWebSocket();
+                }
+            }, delay);
         } else if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-            appendToConsole('\n[ERROR] ❌ Connection lost. Please refresh the page.\n');
+            console.error('❌ Max reconnection attempts reached');
+            if (selectedServer) {
+                appendToConsole('\n[ERROR] ❌ Connection lost. Please refresh the page.\n');
+            }
         }
     };
 
     ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        console.error('❌ WebSocket error:', error);
     };
 }
 
@@ -735,11 +808,22 @@ function connectWebSocket() {
 // ============================================
 
 window.addEventListener('beforeunload', () => {
+    // Clear interval
     if (statusUpdateInterval) {
         clearInterval(statusUpdateInterval);
     }
     
+    // Clear reconnect timeout
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+    }
+    
+    // Close WebSocket cleanly
     if (ws) {
+        // Unsubscribe before closing
+        if (selectedServer && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'unsubscribe', serverName: selectedServer }));
+        }
         ws.close();
     }
 });
