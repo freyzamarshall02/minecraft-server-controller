@@ -16,7 +16,8 @@ const PORT = 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../frontend')));
 
-// Store active WebSocket connections
+// Store active WebSocket connections with their subscriptions
+// Format: Map<WebSocket, Set<serverName>>
 const connections = new Map();
 
 // Auth Routes
@@ -162,7 +163,6 @@ app.post('/api/servers/:serverName/config', auth.verifyToken, async (req, res) =
   }
 });
 
-// NEW: Get server console logs
 app.get('/api/servers/:serverName/logs', auth.verifyToken, async (req, res) => {
   try {
     const { serverName } = req.params;
@@ -177,6 +177,9 @@ app.get('/api/servers/:serverName/logs', auth.verifyToken, async (req, res) => {
 // WebSocket for console output
 wss.on('connection', (ws, req) => {
   console.log('WebSocket client connected');
+  
+  // Initialize empty subscription set for this connection
+  connections.set(ws, new Set());
   
   ws.on('message', (message) => {
     try {
@@ -196,9 +199,20 @@ wss.on('connection', (ws, req) => {
       
       // Subscribe to server console
       if (data.type === 'subscribe' && ws.authenticated) {
-        ws.serverName = data.serverName;
-        connections.set(ws, data.serverName);
-        console.log(`Client subscribed to ${data.serverName}`);
+        const subscriptions = connections.get(ws);
+        if (subscriptions) {
+          subscriptions.add(data.serverName);
+          console.log(`Client subscribed to: ${data.serverName}`);
+        }
+      }
+      
+      // Unsubscribe from server console
+      if (data.type === 'unsubscribe' && ws.authenticated) {
+        const subscriptions = connections.get(ws);
+        if (subscriptions) {
+          subscriptions.delete(data.serverName);
+          console.log(`Client unsubscribed from: ${data.serverName}`);
+        }
       }
     } catch (error) {
       console.error('WebSocket message error:', error);
@@ -209,17 +223,29 @@ wss.on('connection', (ws, req) => {
     connections.delete(ws);
     console.log('WebSocket client disconnected');
   });
+  
+  ws.on('error', (error) => {
+    console.error('WebSocket error:', error);
+    connections.delete(ws);
+  });
 });
 
-// Broadcast console output to connected clients
+// Broadcast console output to subscribed clients
 serverManager.on('console', (serverName, data) => {
-  connections.forEach((subscribedServer, ws) => {
-    if (subscribedServer === serverName && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
-        type: 'console',
-        serverName,
-        data: data.toString()
-      }));
+  const dataString = data.toString();
+  
+  connections.forEach((subscriptions, ws) => {
+    // Check if this connection is subscribed to this server
+    if (subscriptions.has(serverName) && ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(JSON.stringify({
+          type: 'console',
+          serverName,
+          data: dataString
+        }));
+      } catch (error) {
+        console.error('Error sending console data:', error);
+      }
     }
   });
 });
@@ -234,6 +260,12 @@ server.listen(PORT, () => {
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\nShutting down...');
+  
+  // Close all WebSocket connections
+  connections.forEach((_, ws) => {
+    ws.close();
+  });
+  
   serverManager.stopAllServers();
   server.close(() => {
     console.log('Server closed');
