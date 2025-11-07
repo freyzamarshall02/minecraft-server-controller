@@ -229,10 +229,7 @@ class ServerManager extends EventEmitter {
         const output = data.toString();
         const cleanOutput = this.stripAnsiCodes(output);
         
-        // Emit clean output to WebSocket clients
-        this.emit('console', serverName, cleanOutput);
-        
-        // Store last 1000 lines (clean version)
+        // Store in logs (for history when page loads)
         const serverInfo = this.servers.get(serverName);
         if (serverInfo) {
           serverInfo.logs.push(cleanOutput);
@@ -240,27 +237,58 @@ class ServerManager extends EventEmitter {
             serverInfo.logs.shift();
           }
         }
+        
+        // Emit to WebSocket clients (for real-time updates)
+        this.emit('console', serverName, cleanOutput);
       });
 
       // Handle stderr
       serverProcess.stderr.on('data', (data) => {
         const output = data.toString();
         const cleanOutput = this.stripAnsiCodes(output);
-        this.emit('console', serverName, `[ERROR] ${cleanOutput}`);
+        const errorOutput = `[ERROR] ${cleanOutput}`;
+        
+        // Store in logs
+        const serverInfo = this.servers.get(serverName);
+        if (serverInfo) {
+          serverInfo.logs.push(errorOutput);
+          if (serverInfo.logs.length > 1000) {
+            serverInfo.logs.shift();
+          }
+        }
+        
+        // Emit to WebSocket
+        this.emit('console', serverName, errorOutput);
       });
 
       // Handle process exit
       serverProcess.on('exit', (code) => {
         console.log(`Server ${serverName} exited with code ${code}`);
+        const exitMessage = `\n[SERVER STOPPED] Exit code: ${code}\n`;
+        
+        // Store exit message in logs before deleting
+        const serverInfo = this.servers.get(serverName);
+        if (serverInfo) {
+          serverInfo.logs.push(exitMessage);
+        }
+        
         this.servers.delete(serverName);
-        this.emit('console', serverName, `\n[SERVER STOPPED] Exit code: ${code}\n`);
+        this.emit('console', serverName, exitMessage);
       });
 
       // Handle process error
       serverProcess.on('error', (error) => {
         console.error(`Server ${serverName} error:`, error);
+        const errorMessage = `\n[ERROR] ${error.message}\n`;
+        
+        // Store error message
+        const serverInfo = this.servers.get(serverName);
+        if (serverInfo) {
+          serverInfo.logs.push(errorMessage);
+        }
+        
         this.servers.delete(serverName);
-        this.emit('console', serverName, `\n[ERROR] ${error.message}\n`);
+        this.emit('console', serverName, errorMessage);
       });
 
       console.log(`Started server: ${serverName}`);
@@ -314,6 +342,8 @@ class ServerManager extends EventEmitter {
       }
 
       serverInfo.process.stdin.write(command + '\n');
+      
+      // Don't store command echo in logs, just emit it
       this.emit('console', serverName, `> ${command}\n`);
       
       return { success: true };
