@@ -53,14 +53,47 @@ function parseToken(token) {
   }
 }
 
-// Register new user
+// Check if any user exists (for first-time setup)
+async function hasUser() {
+  try {
+    const users = await loadUsers();
+    return Object.keys(users).length > 0;
+  } catch (error) {
+    console.error('Error checking user existence:', error);
+    return false;
+  }
+}
+
+// Get current user info (username only, no password)
+async function getCurrentUser() {
+  try {
+    const users = await loadUsers();
+    const usernames = Object.keys(users);
+    
+    if (usernames.length === 0) {
+      return null;
+    }
+    
+    const username = usernames[0]; // Get the first (and only) user
+    return {
+      username: username,
+      createdAt: users[username].createdAt,
+      lastLogin: users[username].lastLogin
+    };
+  } catch (error) {
+    console.error('Error getting current user:', error);
+    return null;
+  }
+}
+
+// Register new user (only if no user exists)
 async function register(username, password) {
   try {
     const users = await loadUsers();
     
-    // Check if user already exists
-    if (users[username]) {
-      return { success: false, message: 'Username already exists' };
+    // Check if any user already exists (single-user system)
+    if (Object.keys(users).length > 0) {
+      return { success: false, message: 'User already exists. Only one user allowed.' };
     }
     
     // Hash password
@@ -116,6 +149,77 @@ async function login(username, password) {
   }
 }
 
+// Update username
+async function updateUsername(currentUsername, newUsername) {
+  try {
+    const users = await loadUsers();
+    
+    // Check if current user exists
+    if (!users[currentUsername]) {
+      return { success: false, message: 'Current user not found' };
+    }
+    
+    // If username hasn't changed, return success
+    if (currentUsername === newUsername) {
+      return { success: true, message: 'Username unchanged' };
+    }
+    
+    // Copy user data to new username
+    users[newUsername] = users[currentUsername];
+    
+    // Delete old username
+    delete users[currentUsername];
+    
+    await saveUsers(users);
+    
+    // Generate new token with new username
+    const token = generateToken(newUsername);
+    
+    return { 
+      success: true, 
+      message: 'Username updated successfully',
+      token,
+      username: newUsername
+    };
+  } catch (error) {
+    console.error('Update username error:', error);
+    return { success: false, message: 'Failed to update username' };
+  }
+}
+
+// Update password
+async function updatePassword(username, currentPassword, newPassword) {
+  try {
+    const users = await loadUsers();
+    
+    // Check if user exists
+    if (!users[username]) {
+      return { success: false, message: 'User not found' };
+    }
+    
+    // Verify current password
+    const isValid = await bcrypt.compare(currentPassword, users[username].password);
+    
+    if (!isValid) {
+      return { success: false, message: 'Current password is incorrect' };
+    }
+    
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    
+    // Update password
+    users[username].password = hashedPassword;
+    users[username].passwordUpdatedAt = new Date().toISOString();
+    
+    await saveUsers(users);
+    
+    return { success: true, message: 'Password updated successfully' };
+  } catch (error) {
+    console.error('Update password error:', error);
+    return { success: false, message: 'Failed to update password' };
+  }
+}
+
 // Verify token (async)
 async function verifyTokenAsync(token) {
   if (!token) return null;
@@ -163,5 +267,9 @@ module.exports = {
   login,
   verifyToken,
   verifyTokenSync,
-  verifyTokenAsync
+  verifyTokenAsync,
+  hasUser,
+  getCurrentUser,
+  updateUsername,
+  updatePassword
 };
