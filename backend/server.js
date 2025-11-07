@@ -20,6 +20,16 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 // Format: Map<WebSocket, Set<serverName>>
 const connections = new Map();
 
+// Check if first-time setup is needed
+app.get('/api/setup/status', async (req, res) => {
+  try {
+    const userExists = await auth.hasUser();
+    res.json({ hasUser: userExists });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to check setup status' });
+  }
+});
+
 // Auth Routes
 app.post('/api/register', async (req, res) => {
   try {
@@ -58,6 +68,76 @@ app.post('/api/login', async (req, res) => {
     }
   } catch (error) {
     res.status(500).json({ error: 'Server error during login' });
+  }
+});
+
+// Settings Routes
+app.get('/api/settings/user', auth.verifyToken, async (req, res) => {
+  try {
+    const userInfo = await auth.getCurrentUser();
+    
+    if (!userInfo) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({ user: userInfo });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get user info' });
+  }
+});
+
+app.post('/api/settings/username', auth.verifyToken, async (req, res) => {
+  try {
+    const { newUsername } = req.body;
+    const currentUsername = req.user.username;
+    
+    if (!newUsername) {
+      return res.status(400).json({ error: 'New username required' });
+    }
+
+    if (newUsername.length < 3) {
+      return res.status(400).json({ error: 'Username must be at least 3 characters' });
+    }
+
+    const result = await auth.updateUsername(currentUsername, newUsername);
+    
+    if (result.success) {
+      res.json({ 
+        success: true, 
+        message: 'Username updated successfully',
+        token: result.token,
+        username: result.username
+      });
+    } else {
+      res.status(400).json({ error: result.message });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update username' });
+  }
+});
+
+app.post('/api/settings/password', auth.verifyToken, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const username = req.user.username;
+    
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current and new password required' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+
+    const result = await auth.updatePassword(username, currentPassword, newPassword);
+    
+    if (result.success) {
+      res.json({ success: true, message: 'Password updated successfully' });
+    } else {
+      res.status(400).json({ error: result.message });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update password' });
   }
 });
 
