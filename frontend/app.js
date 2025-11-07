@@ -19,13 +19,21 @@ const loginForm = document.getElementById('loginForm');
 const registerForm = document.getElementById('registerForm');
 const authError = document.getElementById('auth-error');
 const registerError = document.getElementById('register-error');
-const showRegisterBtn = document.getElementById('show-register');
-const showLoginBtn = document.getElementById('show-login');
 
 const logoutBtn = document.getElementById('logout-btn');
 const logoutBtn2 = document.getElementById('logout-btn-2');
 const usernameDisplay = document.getElementById('username-display');
 const usernameDisplay2 = document.getElementById('username-display-2');
+
+// Settings elements
+const settingsBtn = document.getElementById('settings-btn');
+const settingsBtn2 = document.getElementById('settings-btn-2');
+const settingsModal = document.getElementById('settings-modal');
+const closeSettingsBtn = document.getElementById('close-settings');
+const settingsMessage = document.getElementById('settings-message');
+const currentUsernameDisplay = document.getElementById('current-username-display');
+const changeUsernameForm = document.getElementById('change-username-form');
+const changePasswordForm = document.getElementById('change-password-form');
 
 const serversGrid = document.getElementById('servers-grid');
 const refreshServersBtn = document.getElementById('refresh-servers');
@@ -46,15 +54,43 @@ const startupCommandInput = document.getElementById('startup-command');
 const saveStartupBtn = document.getElementById('save-startup');
 
 // Initialize
-document.addEventListener('DOMContentLoaded', () => {
-    if (token && username) {
-        showDashboard();
-    } else {
-        showPage('login');
+document.addEventListener('DOMContentLoaded', async () => {
+    // Check if first-time setup is needed
+    await checkFirstTimeSetup();
+});
+
+// ============================================
+// FIRST-TIME SETUP CHECK
+// ============================================
+
+async function checkFirstTimeSetup() {
+    try {
+        const response = await fetch('/api/setup/status');
+        const data = await response.json();
+        
+        if (!data.hasUser) {
+            // No user exists, show register page
+            showPage('register');
+        } else {
+            // User exists, check if logged in
+            if (token && username) {
+                showDashboard();
+            } else {
+                showPage('login');
+            }
+        }
+    } catch (error) {
+        console.error('Failed to check setup status:', error);
+        // Default to login page if check fails
+        if (token && username) {
+            showDashboard();
+        } else {
+            showPage('login');
+        }
     }
     
     initializeTabs();
-});
+}
 
 // ============================================
 // PAGE NAVIGATION
@@ -154,17 +190,6 @@ function showError(message, isRegister = false) {
     }, 5000);
 }
 
-// Switch between login and register
-showRegisterBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    showPage('register');
-});
-
-showLoginBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    showPage('login');
-});
-
 // Login form submission
 loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -238,7 +263,7 @@ registerForm.addEventListener('submit', async (e) => {
 
     const submitBtn = registerForm.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
-    submitBtn.textContent = 'REGISTERING...';
+    submitBtn.textContent = 'CREATING...';
 
     try {
         const response = await fetch('/api/register', {
@@ -253,7 +278,7 @@ registerForm.addEventListener('submit', async (e) => {
             registerForm.reset();
             showPage('login');
             document.getElementById('login-username').value = user;
-            showError('✅ Registration successful! Please login.');
+            showError('✅ Account created successfully! Please login.');
         } else {
             showError(data.error || 'Registration failed', true);
         }
@@ -262,7 +287,7 @@ registerForm.addEventListener('submit', async (e) => {
         showError('Connection error. Please check if the server is running.', true);
     } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = 'REGISTER';
+        submitBtn.textContent = 'CREATE ACCOUNT';
     }
 });
 
@@ -308,6 +333,201 @@ logoutBtn.addEventListener('click', handleLogout);
 logoutBtn2.addEventListener('click', handleLogout);
 
 // ============================================
+// SETTINGS MODAL
+// ============================================
+
+// Open settings modal
+function openSettings() {
+    settingsModal.classList.add('show');
+    loadUserSettings();
+}
+
+// Close settings modal
+function closeSettings() {
+    settingsModal.classList.remove('show');
+    // Reset forms
+    changeUsernameForm.reset();
+    changePasswordForm.reset();
+}
+
+settingsBtn.addEventListener('click', openSettings);
+settingsBtn2.addEventListener('click', openSettings);
+closeSettingsBtn.addEventListener('click', closeSettings);
+
+// Close modal when clicking outside
+settingsModal.addEventListener('click', (e) => {
+    if (e.target === settingsModal) {
+        closeSettings();
+    }
+});
+
+// Show settings message (toast)
+function showSettingsMessage(message, isError = false) {
+    settingsMessage.textContent = message;
+    settingsMessage.className = 'settings-toast show';
+    if (isError) {
+        settingsMessage.classList.add('error');
+    }
+    
+    setTimeout(() => {
+        settingsMessage.classList.remove('show');
+        setTimeout(() => {
+            settingsMessage.classList.remove('error');
+        }, 300);
+    }, 3000);
+}
+
+// Load user settings
+async function loadUserSettings() {
+    try {
+        const response = await fetch('/api/settings/user', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            currentUsernameDisplay.textContent = data.user.username;
+            document.getElementById('new-username').value = data.user.username;
+        } else {
+            currentUsernameDisplay.textContent = username;
+            document.getElementById('new-username').value = username;
+        }
+    } catch (error) {
+        console.error('Failed to load user settings:', error);
+        currentUsernameDisplay.textContent = username;
+        document.getElementById('new-username').value = username;
+    }
+}
+
+// Change username
+changeUsernameForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const newUsername = document.getElementById('new-username').value.trim();
+    
+    if (!newUsername) {
+        showSettingsMessage('Username cannot be empty', true);
+        return;
+    }
+
+    if (newUsername.length < 3) {
+        showSettingsMessage('Username must be at least 3 characters', true);
+        return;
+    }
+
+    if (newUsername === username) {
+        showSettingsMessage('This is already your username', true);
+        return;
+    }
+
+    const submitBtn = changeUsernameForm.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Updating...';
+
+    try {
+        const response = await fetch('/api/settings/username', {
+            method: 'POST',
+            headers: { 
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ newUsername })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            // Update token and username
+            token = data.token;
+            username = data.username;
+            localStorage.setItem('token', token);
+            localStorage.setItem('username', username);
+            
+            // Update displays
+            usernameDisplay.textContent = `👤 ${username}`;
+            usernameDisplay2.textContent = `👤 ${username}`;
+            currentUsernameDisplay.textContent = username;
+            
+            showSettingsMessage('✅ Username updated successfully!');
+            
+            // Reconnect WebSocket with new token
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            connectWebSocket();
+        } else {
+            showSettingsMessage(data.error || 'Failed to update username', true);
+        }
+    } catch (error) {
+        console.error('Update username error:', error);
+        showSettingsMessage('Connection error', true);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Update Username';
+    }
+});
+
+// Change password
+changePasswordForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const currentPassword = document.getElementById('current-password').value;
+    const newPassword = document.getElementById('new-password').value;
+    const confirmNewPassword = document.getElementById('confirm-new-password').value;
+    
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+        showSettingsMessage('Please fill in all fields', true);
+        return;
+    }
+
+    if (newPassword.length < 6) {
+        showSettingsMessage('New password must be at least 6 characters', true);
+        return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+        showSettingsMessage('New passwords do not match', true);
+        return;
+    }
+
+    if (currentPassword === newPassword) {
+        showSettingsMessage('New password must be different from current password', true);
+        return;
+    }
+
+    const submitBtn = changePasswordForm.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Updating...';
+
+    try {
+        const response = await fetch('/api/settings/password', {
+            method: 'POST',
+            headers: { 
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ currentPassword, newPassword })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showSettingsMessage('✅ Password updated successfully!');
+            changePasswordForm.reset();
+        } else {
+            showSettingsMessage(data.error || 'Failed to update password', true);
+        }
+    } catch (error) {
+        console.error('Update password error:', error);
+        showSettingsMessage('Connection error', true);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Update Password';
+    }
+});
+
+// ============================================
 // SERVER MANAGEMENT
 // ============================================
 
@@ -336,7 +556,7 @@ async function loadServers() {
 
 function renderServers() {
     if (servers.length === 0) {
-        serversGrid.innerHTML = '<p class="loading">🔍 No servers found<br><small>Add server folders to minecraft-servers/</small></p>';
+        serversGrid.innerHTML = '<p class="loading">📁 No servers found<br><small>Add server folders to minecraft-servers/</small></p>';
         return;
     }
 
