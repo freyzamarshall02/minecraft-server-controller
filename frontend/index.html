@@ -29,10 +29,6 @@
                         </div>
                         <button type="submit" class="btn btn-primary btn-block">LOGIN</button>
                     </form>
-                    
-                    <div class="login-footer">
-                        <a href="#" id="show-register">Don't have an account? Register</a>
-                    </div>
                 </div>
             </div>
             
@@ -40,7 +36,7 @@
         </div>
     </div>
 
-    <!-- Register Page -->
+    <!-- Register Page (First-time Setup) -->
     <div id="register-page" class="page" style="display: none;">
         <div class="login-container">
             <div class="login-card">
@@ -49,7 +45,8 @@
                 </div>
                 
                 <div class="login-form-wrapper">
-                    <h2>Create Account</h2>
+                    <h2>First-Time Setup</h2>
+                    <p class="setup-text">Create your admin account</p>
                     
                     <form id="registerForm">
                         <div class="form-group">
@@ -64,12 +61,8 @@
                             <label>CONFIRM PASSWORD</label>
                             <input type="password" id="register-confirm" required autocomplete="new-password">
                         </div>
-                        <button type="submit" class="btn btn-primary btn-block">REGISTER</button>
+                        <button type="submit" class="btn btn-primary btn-block">CREATE ACCOUNT</button>
                     </form>
-                    
-                    <div class="login-footer">
-                        <a href="#" id="show-login">Already have an account? Login</a>
-                    </div>
                 </div>
             </div>
             
@@ -85,6 +78,7 @@
             </div>
             <div class="navbar-user">
                 <span id="username-display"></span>
+                <button id="settings-btn" class="btn btn-secondary btn-sm">⚙️ Settings</button>
                 <button id="logout-btn" class="btn btn-secondary btn-sm">Logout</button>
             </div>
         </nav>
@@ -110,6 +104,7 @@
             </div>
             <div class="navbar-user">
                 <span id="username-display-2"></span>
+                <button id="settings-btn-2" class="btn btn-secondary btn-sm">⚙️ Settings</button>
                 <button id="logout-btn-2" class="btn btn-secondary btn-sm">Logout</button>
             </div>
         </nav>
@@ -165,6 +160,59 @@
             </div>
         </div>
     </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚙️ Settings</h2>
+                <button class="modal-close" id="close-settings">&times;</button>
+            </div>
+            
+            <div class="modal-body">
+                <div class="settings-section">
+                    <h3>Account Information</h3>
+                    <div class="info-item">
+                        <span class="info-label">Current Username:</span>
+                        <span class="info-value" id="current-username-display">Loading...</span>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Change Username</h3>
+                    <form id="change-username-form">
+                        <div class="form-group">
+                            <label>NEW USERNAME</label>
+                            <input type="text" id="new-username" class="form-control" required minlength="3">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Update Username</button>
+                    </form>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Change Password</h3>
+                    <form id="change-password-form">
+                        <div class="form-group">
+                            <label>CURRENT PASSWORD</label>
+                            <input type="password" id="current-password" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label>NEW PASSWORD</label>
+                            <input type="password" id="new-password" class="form-control" required minlength="6">
+                        </div>
+                        <div class="form-group">
+                            <label>CONFIRM NEW PASSWORD</label>
+                            <input type="password" id="confirm-new-password" class="form-control" required minlength="6">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Update Password</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Success/Error Messages -->
+    <div id="settings-message" class="settings-toast"></div>
 
     <script src="app.js"></script>
 </body>
