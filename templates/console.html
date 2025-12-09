@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Server.Name}} - Console</title>
+    <link rel="icon" type="image/x-icon" href="/static/images/favicon.ico">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="dashboard-page">
+    <div class="sidebar">
+        <div class="sidebar-menu">
+            <a href="/dashboard" class="menu-item">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="14" width="7" height="7"></rect>
+                    <rect x="3" y="14" width="7" height="7"></rect>
+                </svg>
+                <span>Home</span>
+            </a>
+            <a href="/server/{{.Server.Name}}" class="menu-item active">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="4 17 10 11 4 5"></polyline>
+                    <line x1="12" y1="19" x2="20" y2="19"></line>
+                </svg>
+                <span>Terminal</span>
+            </a>
+            <a href="/server/{{.Server.Name}}/files" class="menu-item">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <span>Files</span>
+            </a>
+            <a href="/server/{{.Server.Name}}/startup" class="menu-item">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M12 1v6m0 6v6m9-9h-6m-6 0H3"></path>
+                </svg>
+                <span>Startup</span>
+            </a>
+        </div>
+        <div class="sidebar-user">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            <span>{{.User.Username}}</span>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="server-header">
+            <div class="server-title">
+                <span class="status-dot {{if eq .Server.Status "online"}}status-online{{else}}status-offline{{end}}"></span>
+                <h1>{{.Server.Name}}</h1>
+            </div>
+            <div class="server-controls">
+                <button id="startBtn" class="btn btn-success" {{if eq .Server.Status "online"}}disabled{{end}}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                </button>
+                <button id="restartBtn" class="btn btn-info" {{if eq .Server.Status "offline"}}disabled{{end}}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                    </svg>
+                </button>
+                <button id="stopBtn" class="btn btn-danger" {{if eq .Server.Status "offline"}}disabled{{end}}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="6" y="6" width="12" height="12"></rect>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="console-layout">
+            <div class="console-main">
+                <div id="console" class="console-output"></div>
+                <div class="console-input">
+                    <span class="console-prompt">&gt;&gt;</span>
+                    <input type="text" id="commandInput" placeholder="Type a command..." {{if eq .Server.Status "offline"}}disabled{{end}}>
+                </div>
+            </div>
+
+            <div class="console-sidebar">
+                <div class="uptime-card">
+                    <div class="uptime-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                    </div>
+                    <div class="uptime-label">Uptime</div>
+                    <div id="uptime" class="uptime-value">{{.Server.FormatUptime}}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const serverName = '{{.Server.Name}}';
+        const serverStatus = '{{.Server.Status}}';
+        let ws = null;
+        let reconnectAttempts = 0;
+
+        // Initialize WebSocket if server is online
+        if (serverStatus === 'online') {
+            connectWebSocket();
+        }
+
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(protocol + '//' + window.location.host + '/server/' + serverName + '/ws');
+
+            ws.onmessage = function(event) {
+                const console = document.getElementById('console');
+                const line = document.createElement('div');
+                line.textContent = event.data;
+                console.appendChild(line);
+                console.scrollTop = console.scrollHeight;
+            };
+
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onclose = function() {
+                console.log('WebSocket closed - server may have stopped');
+                // Reload page after 2 seconds to update UI
+                setTimeout(function() {
+                    location.reload();
+                }, 2000);
+            };
+        }
+
+        // Command input
+        document.getElementById('commandInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && this.value.trim() !== '') {
+                sendCommand(this.value.trim());
+                this.value = '';
+            }
+        });
+
+        function sendCommand(command) {
+            fetch('/server/' + serverName + '/command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'command=' + encodeURIComponent(command)
+            });
+        }
+
+        // Server controls
+        document.getElementById('startBtn').addEventListener('click', function() {
+            controlServer('start');
+        });
+
+        document.getElementById('restartBtn').addEventListener('click', function() {
+            controlServer('restart');
+        });
+
+        document.getElementById('stopBtn').addEventListener('click', function() {
+            controlServer('stop');
+        });
+
+        function controlServer(action) {
+            fetch('/server/' + serverName + '/' + action, {
+                method: 'POST'
+            }).then(response => response.json())
+              .then(data => {
+                  if (data.status) {
+                      setTimeout(() => location.reload(), 1000);
+                  } else if (data.error) {
+                      alert('Error: ' + data.error);
+                  }
+              });
+        }
+
+        // Check server status every 3 seconds
+        setInterval(function() {
+            fetch('/server/' + serverName + '/logs')
+                .then(response => {
+                    if (!response.ok) {
+                        // Server might be offline, reload page
+                        location.reload();
+                    }
+                    return response.json();
+                })
+                .catch(error => {
+                    console.error('Status check failed:', error);
+                });
+        }, 3000);
+
+        // Update uptime every second with client-side calculation
+        let startTime = null;
+        if (serverStatus === 'online') {
+            startTime = new Date().getTime();
+            // Get initial uptime from server to calculate actual start time
+            const uptimeElement = document.getElementById('uptime');
+            const initialUptime = uptimeElement.textContent.trim();
+            if (initialUptime !== 'Offline') {
+                // Parse initial uptime and adjust start time
+                startTime = calculateStartTime(initialUptime);
+            }
+            
+            setInterval(updateUptime, 1000);
+        }
+
+        function calculateStartTime(uptimeStr) {
+            // Parse uptime string like "11h 47m 30s" or "2d 5h 30m 15s"
+            const now = new Date().getTime();
+            let totalSeconds = 0;
+            
+            const days = uptimeStr.match(/(\d+)d/);
+            const hours = uptimeStr.match(/(\d+)h/);
+            const minutes = uptimeStr.match(/(\d+)m/);
+            const seconds = uptimeStr.match(/(\d+)s/);
+            
+            if (days) totalSeconds += parseInt(days[1]) * 86400;
+            if (hours) totalSeconds += parseInt(hours[1]) * 3600;
+            if (minutes) totalSeconds += parseInt(minutes[1]) * 60;
+            if (seconds) totalSeconds += parseInt(seconds[1]);
+            
+            return now - (totalSeconds * 1000);
+        }
+
+        function updateUptime() {
+            if (!startTime) return;
+            
+            const now = new Date().getTime();
+            const diff = now - startTime;
+            
+            const seconds = Math.floor(diff / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+            
+            const s = seconds % 60;
+            const m = minutes % 60;
+            const h = hours % 24;
+            
+            let uptimeStr = '';
+            if (days > 0) {
+                uptimeStr = days + 'd ' + h + 'h ' + m + 'm ' + s + 's';
+            } else {
+                uptimeStr = h + 'h ' + m + 'm ' + s + 's';
+            }
+            
+            document.getElementById('uptime').textContent = uptimeStr;
+        }
+    </script>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

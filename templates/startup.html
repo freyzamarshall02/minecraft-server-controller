@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Server.Name}} - Startup</title>
+    <link rel="icon" type="image/x-icon" href="/static/images/favicon.ico">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="dashboard-page">
+    <div class="sidebar">
+        <div class="sidebar-menu">
+            <a href="/dashboard" class="menu-item">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="14" width="7" height="7"></rect>
+                    <rect x="3" y="14" width="7" height="7"></rect>
+                </svg>
+                <span>Home</span>
+            </a>
+            <a href="/server/{{.Server.Name}}" class="menu-item">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="4 17 10 11 4 5"></polyline>
+                    <line x1="12" y1="19" x2="20" y2="19"></line>
+                </svg>
+                <span>Terminal</span>
+            </a>
+            <a href="/server/{{.Server.Name}}/files" class="menu-item">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <span>Files</span>
+            </a>
+            <a href="/server/{{.Server.Name}}/startup" class="menu-item active">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M12 1v6m0 6v6m9-9h-6m-6 0H3"></path>
+                </svg>
+                <span>Startup</span>
+            </a>
+        </div>
+        <div class="sidebar-user">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            <span>{{.User.Username}}</span>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="content-wrapper">
+            <h1 class="page-title">Startup</h1>
+
+            {{if .Error}}
+                {{range .Error}}
+                    <div class="alert alert-error">{{.}}</div>
+                {{end}}
+            {{end}}
+
+            {{if .Success}}
+                {{range .Success}}
+                    <div class="alert alert-success">{{.}}</div>
+                {{end}}
+            {{end}}
+
+            <div class="card">
+                <h2 class="card-title">Startup Command</h2>
+                <form action="/server/{{.Server.Name}}/startup/update" method="POST">
+                    <div class="form-group">
+                        <label for="command">Command</label>
+                        <textarea id="command" name="command" rows="4" placeholder="java -Xmx2G -Xms2G -jar server.jar" required>{{.Server.StartupCommand}}</textarea>
+                        <small class="form-help">Example: java -Xmx2G -Xms2G -jar server.jar</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Update Startup</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
