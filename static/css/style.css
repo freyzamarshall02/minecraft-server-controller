@@ -161,6 +161,7 @@ body {
 .btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+    pointer-events: none;
 }
 
 .btn-primary {
@@ -578,11 +579,97 @@ body {
         grid-template-columns: 1fr;
     }
 
+    .server-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+        padding: 16px 20px;
+    }
+
+    .server-controls {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
     .console-layout {
         flex-direction: column;
+        padding: 12px;
+        gap: 12px;
+        height: auto;
+        min-height: calc(100vh - 120px);
+    }
+
+    .console-main {
+        min-height: 400px;
+    }
+
+    .console-output {
+        padding: 12px;
+        font-size: 12px;
+    }
+
+    .console-input {
+        padding: 12px;
     }
 
     .console-sidebar {
         width: 100%;
+    }
+
+    .uptime-card {
+        padding: 20px;
+    }
+
+    .page-title {
+        font-size: 24px;
+    }
+
+    .server-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .menu-item {
+        padding: 12px 16px;
+        justify-content: center;
+    }
+
+    .sidebar-user {
+        padding: 16px;
+        justify-content: center;
+    }
+
+    .auth-container {
+        padding: 12px;
+    }
+
+    .auth-card {
+        padding: 24px;
+    }
+}
+
+@media (max-width: 480px) {
+    .console-output {
+        font-size: 11px;
+        line-height: 1.4;
+    }
+
+    .server-controls .btn {
+        padding: 8px 12px;
+    }
+
+    .uptime-value {
+        font-size: 20px;
+    }
+
+    .auth-card {
+        padding: 20px;
+    }
+
+    .auth-title {
+        font-size: 20px;
+    }
+
+    .auth-subtitle {
+        font-size: 18px;
     }
 }
