@@ -128,10 +128,28 @@
 
             ws.onclose = function() {
                 console.log('WebSocket closed - server may have stopped');
-                // Reload page after 2 seconds to update UI
-                setTimeout(function() {
-                    location.reload();
-                }, 2000);
+                
+                // Stop uptime timer
+                if (uptimeInterval) {
+                    clearInterval(uptimeInterval);
+                    uptimeInterval = null;
+                }
+                
+                // Update button states
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('restartBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = true;
+                document.getElementById('commandInput').disabled = true;
+                
+                // Update status dot
+                const statusDot = document.querySelector('.status-dot');
+                if (statusDot) {
+                    statusDot.classList.remove('status-online');
+                    statusDot.classList.add('status-offline');
+                }
+                
+                // Update uptime
+                document.getElementById('uptime').textContent = 'Offline';
             };
         }
 
@@ -170,30 +188,61 @@
             }).then(response => response.json())
               .then(data => {
                   if (data.status) {
-                      setTimeout(() => location.reload(), 1000);
+                      // Only reload for start and restart actions
+                      if (action === 'start' || action === 'restart') {
+                          setTimeout(() => location.reload(), 1000);
+                      }
                   } else if (data.error) {
-                      alert('Error: ' + data.error);
+                      // Don't show alert for "server not running" errors (buttons should prevent this)
+                      if (data.error !== "Server is not running") {
+                          alert('Error: ' + data.error);
+                      }
                   }
               });
         }
 
-        // Check server status every 3 seconds
+        // Check server status every 5 seconds (but don't auto-reload)
         setInterval(function() {
             fetch('/server/' + serverName + '/logs')
                 .then(response => {
                     if (!response.ok) {
-                        // Server might be offline, reload page
-                        location.reload();
+                        // Server is offline, update UI if not already updated
+                        const startBtn = document.getElementById('startBtn');
+                        if (startBtn.disabled) {
+                            // Stop uptime timer
+                            if (uptimeInterval) {
+                                clearInterval(uptimeInterval);
+                                uptimeInterval = null;
+                            }
+                            
+                            // Update button states
+                            document.getElementById('startBtn').disabled = false;
+                            document.getElementById('restartBtn').disabled = true;
+                            document.getElementById('stopBtn').disabled = true;
+                            document.getElementById('commandInput').disabled = true;
+                            
+                            // Update status dot
+                            const statusDot = document.querySelector('.status-dot');
+                            if (statusDot) {
+                                statusDot.classList.remove('status-online');
+                                statusDot.classList.add('status-offline');
+                            }
+                            
+                            // Update uptime
+                            document.getElementById('uptime').textContent = 'Offline';
+                        }
                     }
                     return response.json();
                 })
                 .catch(error => {
                     console.error('Status check failed:', error);
                 });
-        }, 3000);
+        }, 5000);
 
         // Update uptime every second with client-side calculation
         let startTime = null;
+        let uptimeInterval = null;
+        
         if (serverStatus === 'online') {
             startTime = new Date().getTime();
             // Get initial uptime from server to calculate actual start time
@@ -204,7 +253,7 @@
                 startTime = calculateStartTime(initialUptime);
             }
             
-            setInterval(updateUptime, 1000);
+            uptimeInterval = setInterval(updateUptime, 1000);
         }
 
         function calculateStartTime(uptimeStr) {
