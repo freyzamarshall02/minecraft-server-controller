@@ -201,7 +201,15 @@ func StopServer(w http.ResponseWriter, r *http.Request) {
 
 	server, err := models.GetServerByName(serverName, userID)
 	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"error": "Server not found"})
+		return
+	}
+
+	// Check if server is actually running
+	if !services.IsServerRunning(server) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"error": "Server is not running"})
 		return
 	}
 
@@ -223,7 +231,15 @@ func RestartServer(w http.ResponseWriter, r *http.Request) {
 
 	server, err := models.GetServerByName(serverName, userID)
 	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"error": "Server not found"})
+		return
+	}
+
+	// Check if server is actually running
+	if !services.IsServerRunning(server) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"error": "Server is not running"})
 		return
 	}
 
