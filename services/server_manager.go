@@ -98,7 +98,7 @@ func StartServer(server *models.Server) error {
 	// Monitor process
 	go sp.monitorProcess()
 
-	log.Printf("Server '%s' started successfully", server.Name)
+	log.Printf("✅ Server '%s' started successfully (PID: %d)", server.Name, cmd.Process.Pid)
 	return nil
 }
 
@@ -112,9 +112,12 @@ func StopServer(server *models.Server) error {
 		return errors.New("server is not running")
 	}
 
+	log.Printf("⏹️  Stopping server '%s'...", server.Name)
+
 	// Send stop command to server
 	if sp.Stdin != nil {
 		sp.Stdin.Write([]byte("stop\n"))
+		sp.Stdin.Write([]byte("end\n")) // Some servers use "end"
 	}
 
 	// Wait for graceful shutdown (with timeout)
@@ -126,8 +129,10 @@ func StopServer(server *models.Server) error {
 	select {
 	case <-done:
 		// Process stopped gracefully
-	case <-timeoutAfter(30):
+		log.Printf("✅ Server '%s' stopped gracefully", server.Name)
+	case <-time.After(30 * time.Second):
 		// Force kill if not stopped after 30 seconds
+		log.Printf("⚠️  Server '%s' did not stop gracefully, forcing kill", server.Name)
 		if sp.Cmd.Process != nil {
 			sp.Cmd.Process.Kill()
 		}
@@ -137,7 +142,15 @@ func StopServer(server *models.Server) error {
 	delete(runningServers, server.ID)
 	server.SetStatus("offline")
 
-	log.Printf("Server '%s' stopped", server.Name)
+	// Close all WebSocket connections
+	sp.ClientMux.Lock()
+	for _, client := range sp.Clients {
+		client.WriteMessage(websocket.TextMessage, []byte("\n=== Server stopped ===\n"))
+		client.Close()
+	}
+	sp.Clients = []*websocket.Conn{}
+	sp.ClientMux.Unlock()
+
 	return nil
 }
 
@@ -208,20 +221,43 @@ func AddConsoleListener(server *models.Server, conn *websocket.Conn) {
 	serverMux.Unlock()
 
 	if !exists {
+		log.Printf("⚠️  Cannot add console listener: server %s is not running", server.Name)
+		conn.WriteMessage(websocket.TextMessage, []byte("Error: Server is not running\n"))
+		conn.Close()
 		return
 	}
 
 	sp.ClientMux.Lock()
-	defer sp.ClientMux.Unlock()
-
 	sp.Clients = append(sp.Clients, conn)
+	clientCount := len(sp.Clients)
+	sp.ClientMux.Unlock()
+
+	log.Printf("✅ WebSocket client connected to server '%s' (total clients: %d)", server.Name, clientCount)
 
 	// Send existing logs to new client
 	sp.LogMux.Lock()
-	for _, log := range sp.Logs {
-		conn.WriteMessage(websocket.TextMessage, []byte(log))
+	for _, logLine := range sp.Logs {
+		conn.WriteMessage(websocket.TextMessage, []byte(logLine))
 	}
 	sp.LogMux.Unlock()
+
+	// Set up ping/pong handlers for keepalive
+	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		return nil
+	})
+
+	// Start ping ticker
+	ticker := time.NewTicker(30 * time.Second)
+	go func() {
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
+		}
+	}()
 }
 
 // RemoveConsoleListener removes a WebSocket client
@@ -240,6 +276,7 @@ func RemoveConsoleListener(server *models.Server, conn *websocket.Conn) {
 	for i, client := range sp.Clients {
 		if client == conn {
 			sp.Clients = append(sp.Clients[:i], sp.Clients[i+1:]...)
+			log.Printf("🔌 WebSocket client disconnected from server '%s' (remaining: %d)", server.Name, len(sp.Clients))
 			break
 		}
 	}
@@ -265,13 +302,25 @@ func (sp *ServerProcess) readOutput(reader io.ReadCloser, isError bool) {
 
 		// Broadcast to WebSocket clients
 		sp.ClientMux.Lock()
-		for _, client := range sp.Clients {
+		disconnectedClients := []int{}
+		for i, client := range sp.Clients {
 			err := client.WriteMessage(websocket.TextMessage, []byte(line))
 			if err != nil {
-				// Client disconnected, will be removed later
+				// Mark client for removal
+				disconnectedClients = append(disconnectedClients, i)
 			}
 		}
+		
+		// Remove disconnected clients
+		for i := len(disconnectedClients) - 1; i >= 0; i-- {
+			idx := disconnectedClients[i]
+			sp.Clients = append(sp.Clients[:idx], sp.Clients[idx+1:]...)
+		}
 		sp.ClientMux.Unlock()
+	}
+	
+	if err := scanner.Err(); err != nil {
+		log.Printf("⚠️  Error reading output from server '%s': %v", sp.Server.Name, err)
 	}
 }
 
@@ -305,9 +354,19 @@ func stripAnsiCodes(text string) string {
 
 // monitorProcess monitors the server process and updates status
 func (sp *ServerProcess) monitorProcess() {
-	sp.Cmd.Wait()
+	// Wait for process to end
+	err := sp.Cmd.Wait()
+	
+	exitCode := 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		}
+	}
 
-	// Process has stopped
+	log.Printf("⚠️  Server '%s' process ended (exit code: %d)", sp.Server.Name, exitCode)
+
+	// Process has stopped - clean up
 	serverMux.Lock()
 	delete(runningServers, sp.Server.ID)
 	serverMux.Unlock()
@@ -317,23 +376,11 @@ func (sp *ServerProcess) monitorProcess() {
 	// Notify all WebSocket clients that server is offline
 	sp.ClientMux.Lock()
 	for _, client := range sp.Clients {
-		client.WriteMessage(websocket.TextMessage, []byte("\n=== Server stopped ===\n"))
+		client.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\n=== Server stopped (exit code: %d) ===\n", exitCode)))
 		client.Close()
 	}
 	sp.Clients = []*websocket.Conn{}
 	sp.ClientMux.Unlock()
-
-	log.Printf("Server '%s' process ended", sp.Server.Name)
-}
-
-// timeoutAfter creates a timeout channel
-func timeoutAfter(seconds int) <-chan struct{} {
-	timeout := make(chan struct{})
-	go func() {
-		time.Sleep(time.Duration(seconds) * time.Second)
-		close(timeout)
-	}()
-	return timeout
 }
 
 // IsServerRunning checks if a server is currently running
