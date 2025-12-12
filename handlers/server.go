@@ -328,11 +328,16 @@ func ConsoleWebSocket(w http.ResponseWriter, r *http.Request) {
 	services.AddConsoleListener(server, conn)
 	defer services.RemoveConsoleListener(server, conn)
 
-	// Keep connection alive
+	// Keep connection alive and handle ping/pong
 	for {
-		_, _, err := conn.ReadMessage()
+		messageType, message, err := conn.ReadMessage()
 		if err != nil {
 			break
+		}
+		
+		// Handle ping from client
+		if messageType == websocket.TextMessage && string(message) == "ping" {
+			conn.WriteMessage(websocket.TextMessage, []byte("pong"))
 		}
 	}
 }
