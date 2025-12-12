@@ -103,23 +103,45 @@
         const serverName = '{{.Server.Name}}';
         const serverStatus = '{{.Server.Status}}';
         let ws = null;
-        let reconnectAttempts = 0;
+        let uptimeInterval = null;
+        let startTime = null;
+        let isConnected = false;
 
         // Initialize WebSocket if server is online
         if (serverStatus === 'online') {
             connectWebSocket();
+            initializeUptime();
         }
+
+        let pingInterval = null;
 
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             ws = new WebSocket(protocol + '//' + window.location.host + '/server/' + serverName + '/ws');
 
+            ws.onopen = function() {
+                console.log('WebSocket connected');
+                isConnected = true;
+                setServerOnline();
+                
+                // Start keepalive ping every 30 seconds
+                if (pingInterval) clearInterval(pingInterval);
+                pingInterval = setInterval(function() {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send('ping');
+                    }
+                }, 30000);
+            };
+
             ws.onmessage = function(event) {
-                const console = document.getElementById('console');
+                // Ignore pong responses
+                if (event.data === 'pong') return;
+                
+                const consoleEl = document.getElementById('console');
                 const line = document.createElement('div');
                 line.textContent = event.data;
-                console.appendChild(line);
-                console.scrollTop = console.scrollHeight;
+                consoleEl.appendChild(line);
+                consoleEl.scrollTop = consoleEl.scrollHeight;
             };
 
             ws.onerror = function(error) {
@@ -127,137 +149,87 @@
             };
 
             ws.onclose = function() {
-                console.log('WebSocket closed - server may have stopped');
+                console.log('WebSocket closed - server stopped');
+                isConnected = false;
                 
-                // Stop uptime timer
-                if (uptimeInterval) {
-                    clearInterval(uptimeInterval);
-                    uptimeInterval = null;
+                // Stop keepalive
+                if (pingInterval) {
+                    clearInterval(pingInterval);
+                    pingInterval = null;
                 }
                 
-                // Update button states
-                document.getElementById('startBtn').disabled = false;
-                document.getElementById('restartBtn').disabled = true;
-                document.getElementById('stopBtn').disabled = true;
-                document.getElementById('commandInput').disabled = true;
-                
-                // Update status dot
-                const statusDot = document.querySelector('.status-dot');
-                if (statusDot) {
-                    statusDot.classList.remove('status-online');
-                    statusDot.classList.add('status-offline');
-                }
-                
-                // Update uptime
-                document.getElementById('uptime').textContent = 'Offline';
+                setServerOffline();
             };
         }
 
-        // Command input
-        document.getElementById('commandInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter' && this.value.trim() !== '') {
-                sendCommand(this.value.trim());
-                this.value = '';
-            }
-        });
-
-        function sendCommand(command) {
-            fetch('/server/' + serverName + '/command', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'command=' + encodeURIComponent(command)
-            });
-        }
-
-        // Server controls
-        document.getElementById('startBtn').addEventListener('click', function() {
-            controlServer('start');
-        });
-
-        document.getElementById('restartBtn').addEventListener('click', function() {
-            controlServer('restart');
-        });
-
-        document.getElementById('stopBtn').addEventListener('click', function() {
-            controlServer('stop');
-        });
-
-        function controlServer(action) {
-            fetch('/server/' + serverName + '/' + action, {
-                method: 'POST'
-            }).then(response => response.json())
-              .then(data => {
-                  if (data.status) {
-                      // Only reload for start and restart actions
-                      if (action === 'start' || action === 'restart') {
-                          setTimeout(() => location.reload(), 1000);
-                      }
-                  } else if (data.error) {
-                      // Don't show alert for "server not running" errors (buttons should prevent this)
-                      if (data.error !== "Server is not running") {
-                          alert('Error: ' + data.error);
-                      }
-                  }
-              });
-        }
-
-        // Check server status every 5 seconds (but don't auto-reload)
-        setInterval(function() {
-            fetch('/server/' + serverName + '/logs')
-                .then(response => {
-                    if (!response.ok) {
-                        // Server is offline, update UI if not already updated
-                        const startBtn = document.getElementById('startBtn');
-                        if (startBtn.disabled) {
-                            // Stop uptime timer
-                            if (uptimeInterval) {
-                                clearInterval(uptimeInterval);
-                                uptimeInterval = null;
-                            }
-                            
-                            // Update button states
-                            document.getElementById('startBtn').disabled = false;
-                            document.getElementById('restartBtn').disabled = true;
-                            document.getElementById('stopBtn').disabled = true;
-                            document.getElementById('commandInput').disabled = true;
-                            
-                            // Update status dot
-                            const statusDot = document.querySelector('.status-dot');
-                            if (statusDot) {
-                                statusDot.classList.remove('status-online');
-                                statusDot.classList.add('status-offline');
-                            }
-                            
-                            // Update uptime
-                            document.getElementById('uptime').textContent = 'Offline';
-                        }
-                    }
-                    return response.json();
-                })
-                .catch(error => {
-                    console.error('Status check failed:', error);
-                });
-        }, 5000);
-
-        // Update uptime every second with client-side calculation
-        let startTime = null;
-        let uptimeInterval = null;
-        
-        if (serverStatus === 'online') {
-            startTime = new Date().getTime();
-            // Get initial uptime from server to calculate actual start time
-            const uptimeElement = document.getElementById('uptime');
-            const initialUptime = uptimeElement.textContent.trim();
-            if (initialUptime !== 'Offline') {
-                // Parse initial uptime and adjust start time
-                startTime = calculateStartTime(initialUptime);
+        function setServerOnline() {
+            // Update button states
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('restartBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('commandInput').disabled = false;
+            
+            // Update status dot
+            const statusDot = document.querySelector('.status-dot');
+            if (statusDot) {
+                statusDot.classList.remove('status-offline');
+                statusDot.classList.add('status-online');
             }
             
+            // Start uptime if not already running
+            if (!uptimeInterval) {
+                initializeUptime();
+            }
+        }
+
+        function setServerOffline() {
+            // Stop uptime timer
+            if (uptimeInterval) {
+                clearInterval(uptimeInterval);
+                uptimeInterval = null;
+            }
+            startTime = null;
+            
+            // Update button states
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('restartBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('commandInput').disabled = true;
+            
+            // Update status dot
+            const statusDot = document.querySelector('.status-dot');
+            if (statusDot) {
+                statusDot.classList.remove('status-online');
+                statusDot.classList.add('status-offline');
+            }
+            
+            // Update uptime
+            document.getElementById('uptime').textContent = 'Offline';
+        }
+
+        function initializeUptime() {
+            const uptimeElement = document.getElementById('uptime');
+            const initialUptime = uptimeElement.textContent.trim();
+            
+            if (initialUptime !== 'Offline') {
+                // Parse initial uptime and calculate start time
+                startTime = calculateStartTime(initialUptime);
+            } else {
+                // Server just started
+                startTime = new Date().getTime();
+            }
+            
+            // Clear any existing interval
+            if (uptimeInterval) {
+                clearInterval(uptimeInterval);
+            }
+            
+            // Start new interval
             uptimeInterval = setInterval(updateUptime, 1000);
+            updateUptime(); // Update immediately
         }
 
         function calculateStartTime(uptimeStr) {
-            // Parse uptime string like "11h 47m 30s" or "2d 5h 30m 15s"
             const now = new Date().getTime();
             let totalSeconds = 0;
             
@@ -298,6 +270,85 @@
             
             document.getElementById('uptime').textContent = uptimeStr;
         }
+
+        // Command input
+        document.getElementById('commandInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && this.value.trim() !== '') {
+                sendCommand(this.value.trim());
+                this.value = '';
+            }
+        });
+
+        function sendCommand(command) {
+            fetch('/server/' + serverName + '/command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'command=' + encodeURIComponent(command)
+            }).catch(err => console.error('Command failed:', err));
+        }
+
+        // Server controls
+        document.getElementById('startBtn').addEventListener('click', function() {
+            controlServer('start');
+        });
+
+        document.getElementById('restartBtn').addEventListener('click', function() {
+            controlServer('restart');
+        });
+
+        document.getElementById('stopBtn').addEventListener('click', function() {
+            controlServer('stop');
+        });
+
+        function controlServer(action) {
+            const btn = document.getElementById(action + 'Btn');
+            const originalDisabled = btn.disabled;
+            btn.disabled = true;
+            
+            fetch('/server/' + serverName + '/' + action, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status) {
+                    console.log(action + ' command sent successfully');
+                    
+                    // For start/restart, wait then reload to reconnect WebSocket
+                    if (action === 'start') {
+                        setTimeout(() => location.reload(), 2000);
+                    } else if (action === 'restart') {
+                        // Show restarting message
+                        const consoleEl = document.getElementById('console');
+                        const line = document.createElement('div');
+                        line.textContent = '\n=== Server is restarting... ===\n';
+                        line.style.color = '#60a5fa';
+                        consoleEl.appendChild(line);
+                        
+                        // Reload after delay
+                        setTimeout(() => location.reload(), 3000);
+                    }
+                    // For stop, WebSocket onclose will handle UI update
+                } else if (data.error) {
+                    alert('Error: ' + data.error);
+                    btn.disabled = originalDisabled;
+                }
+            })
+            .catch(err => {
+                console.error('Control failed:', err);
+                btn.disabled = originalDisabled;
+            });
+        }
+
+        // Heartbeat: Only check if WebSocket is disconnected
+        setInterval(function() {
+            // Only poll if we think we should be connected but aren't
+            if (serverStatus === 'online' && !isConnected && !ws) {
+                // Try to reconnect
+                console.log('Attempting to reconnect WebSocket...');
+                connectWebSocket();
+            }
+        }, 10000); // Check every 10 seconds (less aggressive)
+
     </script>
     <script src="/static/js/main.js"></script>
 </body>
