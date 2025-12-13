@@ -10,6 +10,7 @@ body {
     background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #0ea5e9 100%);
     color: #fff;
     min-height: 100vh;
+    overflow: hidden;
 }
 
 /* Auth Pages (Login/Register) */
@@ -560,8 +561,12 @@ body {
     text-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
 }
 
-/* Responsive */
+/* Responsive - UPDATED FOR MOBILE FIX */
 @media (max-width: 768px) {
+    body {
+        overflow: auto;
+    }
+
     .sidebar {
         width: 60px;
     }
@@ -569,6 +574,16 @@ body {
     .sidebar-menu .menu-item span,
     .sidebar-user span {
         display: none;
+    }
+
+    .menu-item {
+        justify-content: center;
+        padding: 12px 10px;
+    }
+
+    .sidebar-user {
+        justify-content: center;
+        padding: 12px 10px;
     }
 
     .content-wrapper {
@@ -583,7 +598,10 @@ body {
         flex-direction: column;
         gap: 12px;
         align-items: flex-start;
-        padding: 16px 20px;
+        padding: 12px 16px;
+        position: sticky;
+        top: 0;
+        z-index: 10;
     }
 
     .server-controls {
@@ -591,33 +609,59 @@ body {
         justify-content: flex-end;
     }
 
+    .server-controls .btn {
+        padding: 10px 14px;
+    }
+
+    /* FIXED MOBILE CONSOLE LAYOUT */
     .console-layout {
         flex-direction: column;
         padding: 12px;
         gap: 12px;
         height: auto;
-        min-height: calc(100vh - 120px);
+        min-height: calc(100vh - 100px);
     }
 
     .console-main {
-        min-height: 400px;
+        flex: 0 0 auto;
+        min-height: 450px;
+        max-height: 600px;
+        height: auto;
     }
 
     .console-output {
         padding: 12px;
-        font-size: 12px;
+        font-size: 11px;
+        line-height: 1.4;
+        height: 450px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
     }
 
     .console-input {
         padding: 12px;
+        flex-shrink: 0;
     }
 
     .console-sidebar {
         width: 100%;
+        flex-shrink: 0;
+        margin-bottom: 20px;
     }
 
     .uptime-card {
         padding: 20px;
+    }
+
+    .main-content {
+        height: 100vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .dashboard-page {
+        height: 100vh;
+        overflow: auto;
     }
 
     .page-title {
@@ -626,16 +670,6 @@ body {
 
     .server-grid {
         grid-template-columns: 1fr;
-    }
-
-    .menu-item {
-        padding: 12px 16px;
-        justify-content: center;
-    }
-
-    .sidebar-user {
-        padding: 16px;
-        justify-content: center;
     }
 
     .auth-container {
@@ -649,8 +683,19 @@ body {
 
 @media (max-width: 480px) {
     .console-output {
-        font-size: 11px;
-        line-height: 1.4;
+        font-size: 10px;
+        line-height: 1.3;
+        padding: 10px;
+        height: 400px;
+    }
+
+    .console-input {
+        padding: 10px;
+    }
+
+    .console-input input {
+        font-size: 12px;
+        padding: 6px 10px;
     }
 
     .server-controls .btn {
@@ -658,7 +703,30 @@ body {
     }
 
     .uptime-value {
-        font-size: 20px;
+        font-size: 18px;
+    }
+
+    .server-header {
+        padding: 10px 12px;
+    }
+
+    .console-layout {
+        padding: 8px;
+        gap: 8px;
+        min-height: calc(100vh - 90px);
+    }
+
+    .console-main {
+        min-height: 400px;
+        max-height: 550px;
+    }
+
+    .console-sidebar {
+        margin-bottom: 60px;
+    }
+
+    .sidebar {
+        width: 50px;
     }
 
     .auth-card {
