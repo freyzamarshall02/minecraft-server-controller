@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +29,14 @@ type ServerProcess struct {
 	LogMux  sync.Mutex
 	Clients []*websocket.Conn
 	ClientMux sync.Mutex
+}
+
+// ServerStats holds server statistics
+type ServerStats struct {
+	MemoryMB float64 `json:"memory_mb"`
+	MemoryGB float64 `json:"memory_gb"`
+	PID      int     `json:"pid"`
+	IsRunning bool   `json:"is_running"`
 }
 
 var (
@@ -212,6 +222,73 @@ func GetLogs(server *models.Server) []string {
 	logs := make([]string, len(sp.Logs))
 	copy(logs, sp.Logs)
 	return logs
+}
+
+// GetServerStats returns server statistics (memory usage, etc.)
+func GetServerStats(server *models.Server) (*ServerStats, error) {
+	serverMux.Lock()
+	sp, exists := runningServers[server.ID]
+	serverMux.Unlock()
+
+	if !exists {
+		return &ServerStats{
+			MemoryMB:  0,
+			MemoryGB:  0,
+			PID:       0,
+			IsRunning: false,
+		}, nil
+	}
+
+	pid := sp.Cmd.Process.Pid
+	memoryKB, err := getProcessMemory(pid)
+	if err != nil {
+		log.Printf("⚠️  Failed to get memory for PID %d: %v", pid, err)
+		return &ServerStats{
+			MemoryMB:  0,
+			MemoryGB:  0,
+			PID:       pid,
+			IsRunning: true,
+		}, nil
+	}
+
+	memoryMB := float64(memoryKB) / 1024.0
+	memoryGB := memoryMB / 1024.0
+
+	return &ServerStats{
+		MemoryMB:  memoryMB,
+		MemoryGB:  memoryGB,
+		PID:       pid,
+		IsRunning: true,
+	}, nil
+}
+
+// getProcessMemory reads memory usage from /proc/[pid]/status
+func getProcessMemory(pid int) (int64, error) {
+	// Read /proc/[pid]/status
+	statusFile := fmt.Sprintf("/proc/%d/status", pid)
+	file, err := os.Open(statusFile)
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Look for VmRSS (Resident Set Size - actual RAM usage)
+		if strings.HasPrefix(line, "VmRSS:") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				memKB, err := strconv.ParseInt(fields[1], 10, 64)
+				if err != nil {
+					return 0, err
+				}
+				return memKB, nil
+			}
+		}
+	}
+
+	return 0, fmt.Errorf("VmRSS not found in /proc/%d/status", pid)
 }
 
 // AddConsoleListener adds a WebSocket client to receive console updates
