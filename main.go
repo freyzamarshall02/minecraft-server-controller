@@ -53,6 +53,7 @@ func main() {
 	protected.HandleFunc("/server/{name}/restart", handlers.RestartServer).Methods("POST")
 	protected.HandleFunc("/server/{name}/command", handlers.SendCommand).Methods("POST")
 	protected.HandleFunc("/server/{name}/logs", handlers.GetLogs).Methods("GET")
+	protected.HandleFunc("/server/{name}/stats", handlers.GetServerStats).Methods("GET")
 	protected.HandleFunc("/server/{name}/ws", handlers.ConsoleWebSocket).Methods("GET")
 
 	// Startup management
