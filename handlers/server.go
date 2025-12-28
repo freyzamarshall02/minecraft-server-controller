@@ -306,6 +306,31 @@ func GetLogs(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetServerStats retrieves server statistics (memory, CPU, etc.)
+func GetServerStats(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	serverName := vars["name"]
+	userID := middleware.GetUserID(r)
+
+	server, err := models.GetServerByName(serverName, userID)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"error": "Server not found"})
+		return
+	}
+
+	stats, err := services.GetServerStats(server)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
+}
+
 // ConsoleWebSocket handles WebSocket connections for real-time console output
 func ConsoleWebSocket(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
