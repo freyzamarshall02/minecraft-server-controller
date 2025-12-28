@@ -95,6 +95,18 @@
                     <div class="uptime-label">Uptime</div>
                     <div id="uptime" class="uptime-value">{{.Server.FormatUptime}}</div>
                 </div>
+
+                <div class="uptime-card" style="margin-top: 12px;">
+                    <div class="uptime-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                            <line x1="8" y1="21" x2="16" y2="21"></line>
+                            <line x1="12" y1="17" x2="12" y2="21"></line>
+                        </svg>
+                    </div>
+                    <div class="uptime-label">Memory Usage</div>
+                    <div id="memory" class="uptime-value">-</div>
+                </div>
             </div>
         </div>
     </div>
@@ -106,11 +118,13 @@
         let uptimeInterval = null;
         let startTime = null;
         let isConnected = false;
+        let statsInterval = null;
 
         // Initialize WebSocket if server is online
         if (serverStatus === 'online') {
             connectWebSocket();
             initializeUptime();
+            startStatsPolling();
         }
 
         let pingInterval = null;
@@ -180,6 +194,11 @@
             if (!uptimeInterval) {
                 initializeUptime();
             }
+
+            // Start stats polling
+            if (!statsInterval) {
+                startStatsPolling();
+            }
         }
 
         function setServerOffline() {
@@ -189,6 +208,12 @@
                 uptimeInterval = null;
             }
             startTime = null;
+
+            // Stop stats polling
+            if (statsInterval) {
+                clearInterval(statsInterval);
+                statsInterval = null;
+            }
             
             // Update button states
             document.getElementById('startBtn').disabled = false;
@@ -203,8 +228,9 @@
                 statusDot.classList.add('status-offline');
             }
             
-            // Update uptime
+            // Update uptime and memory
             document.getElementById('uptime').textContent = 'Offline';
+            document.getElementById('memory').textContent = '-';
         }
 
         function initializeUptime() {
@@ -269,6 +295,42 @@
             }
             
             document.getElementById('uptime').textContent = uptimeStr;
+        }
+
+        // Stats polling - fetch memory usage every 3 seconds
+        function startStatsPolling() {
+            // Fetch immediately
+            fetchStats();
+            
+            // Then fetch every 3 seconds
+            statsInterval = setInterval(fetchStats, 3000);
+        }
+
+        function fetchStats() {
+            fetch('/server/' + serverName + '/stats')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.is_running) {
+                        updateMemoryDisplay(data.memory_mb, data.memory_gb);
+                    } else {
+                        document.getElementById('memory').textContent = '-';
+                    }
+                })
+                .catch(err => {
+                    console.error('Failed to fetch stats:', err);
+                });
+        }
+
+        function updateMemoryDisplay(memoryMB, memoryGB) {
+            const memoryEl = document.getElementById('memory');
+            
+            if (memoryGB >= 1) {
+                // Show in GB if >= 1 GB
+                memoryEl.textContent = memoryGB.toFixed(2) + ' GB';
+            } else {
+                // Show in MB if < 1 GB
+                memoryEl.textContent = memoryMB.toFixed(0) + ' MB';
+            }
         }
 
         // Command input
