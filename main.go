@@ -42,6 +42,10 @@ func main() {
 	protected.HandleFunc("/account/update-username", handlers.UpdateUsername).Methods("POST")
 	protected.HandleFunc("/account/update-password", handlers.UpdatePassword).Methods("POST")
 
+	// Resource monitoring (NEW)
+	protected.HandleFunc("/resource", handlers.ResourcePage).Methods("GET")
+	protected.HandleFunc("/api/system/stats", handlers.GetSystemStats).Methods("GET")
+
 	// Settings
 	protected.HandleFunc("/settings", handlers.SettingsPage).Methods("GET")
 	protected.HandleFunc("/settings/update-path", handlers.UpdateServerPath).Methods("POST")
